@@ -27,3 +27,7 @@ htmlcov/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Generated Slide Images
+slide_images/
+
