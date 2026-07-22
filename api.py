@@ -121,8 +121,28 @@ async def gnn_model_endpoint(req: GNNPredictRequest):
 
 @app.post("/models/vit/predict")
 async def vit_model_endpoint(req: ViTPredictRequest):
-    """PyTorch Vision Transformer (ViT) Dedicated Microservice Endpoint."""
+    """PyTorch Vision Transformer (ViT) & MDPI 2026 Visual Suite Dedicated Microservice Endpoint."""
     return ViTService.predict(req.url, req.image_path or "")
+
+@app.post("/models/phishpedia/predict")
+async def phishpedia_endpoint(req: ViTPredictRequest):
+    """Phishpedia Faster R-CNN Object Detection & Siamese Brand Matching Microservice Endpoint (MDPI 2026)."""
+    return ViTService.predict_phishpedia(req.url)
+
+@app.post("/models/visualphishnet/predict")
+async def visualphishnet_endpoint(req: ViTPredictRequest):
+    """VisualPhishNet Triplet Loss CNN Layout Embedding Microservice Endpoint (MDPI 2026)."""
+    return ViTService.predict_visualphishnet(req.url)
+
+@app.post("/models/phash/predict")
+async def phash_endpoint(req: ViTPredictRequest):
+    """Perceptual Hashing (pHash + DCT + FAISS) Baseline Microservice Endpoint (MDPI 2026)."""
+    return ViTService.predict_phash(req.url)
+
+@app.post("/models/visual-hybrid/predict")
+async def visual_hybrid_endpoint(req: ViTPredictRequest):
+    """MDPI 2026 Hybrid Visual Detector (pHash Binary Filter + Phishpedia Brand Attribution)."""
+    return ViTService.predict_hybrid_visual(req.url)
 
 @app.post("/models/bert/predict")
 async def bert_model_endpoint(req: BERTPredictRequest):
