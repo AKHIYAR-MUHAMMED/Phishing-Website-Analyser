@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # 1. PhishGuard-X FastAPI Application Server
+  phishguard-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phishguard-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://phishguard:cybersecret123@postgres:5432/phishguard_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MONGO_URI=mongodb://mongo:27017/phishguard_docs
+    depends_on:
+      - postgres
+      - redis
+      - mongo
+    restart: always
+
+  # 2. PostgreSQL Relational Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: phishguard-postgres
+    environment:
+      - POSTGRES_USER=phishguard
+      - POSTGRES_PASSWORD=cybersecret123
+      - POSTGRES_DB=phishguard_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  # 3. MongoDB Document Store
+  mongo:
+    image: mongo:6-jammy
+    container_name: phishguard-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: always
+
+  # 4. Redis In-Memory Cache & Message Queue
+  redis:
+    image: redis:7-alpine
+    container_name: phishguard-redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  # 5. Prometheus Monitoring Engine
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: phishguard-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    restart: always
+
+volumes:
+  postgres_data:
+  mongo_data:
