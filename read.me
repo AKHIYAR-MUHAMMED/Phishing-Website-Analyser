@@ -27,6 +27,17 @@ Modern phishing attacks bypass conventional blocklists and static lexical filter
 
 ---
 
+## 🖼️ Visual Phishing Detection & Target Recognition Engine (MDPI 2026 Integration)
+
+Based on the paper *"Phishing Website Impersonation: Comparative Analysis of Detection and Target Recognition Methods"* (Jarczewski, Białczak, & Mazurczyk, *MDPI Applied Sciences*, 2026), PhishGuard-X incorporates three visual recognition paradigms and their optimal hybrid pipeline:
+
+1. **Perceptual Hashing Baseline (`pHash` / `pHashF` + FAISS)**: Uses Discrete Cosine Transform (DCT) frequency extraction and FAISS similarity vector indexing to provide rapid, stable binary classification (**F1 = 0.95**, **ROC AUC = 0.82**), eliminating deep feature collapse.
+2. **Phishpedia**: A 2-stage object detection system using Faster R-CNN for logo candidate proposal followed by a Siamese network for target brand recognition (**Identification Rate > 0.9** across CERT Polska, PP, and VP datasets).
+3. **VisualPhishNet**: A VGG-16 Triplet Loss CNN for holistic webpage layout embeddings with Equal Error Rate (EER) threshold optimization.
+4. **MDPI 2026 Hybrid Architecture**: Combines Stage 1 Perceptual Hashing for instant binary threat filtering with Stage 2 Phishpedia for precise brand target attribution.
+
+---
+
 ## 🤖 10-LLM Multi-Engine Consensus Orchestrator
 
 PhishGuard-X incorporates a concurrent, fault-tolerant multi-engine LLM pipeline that queries 10 top-tier AI models for consensus classification:

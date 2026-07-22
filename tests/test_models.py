@@ -57,8 +57,18 @@ def test_dom_and_js_services():
 def test_vision_services():
     shot = ScreenshotService.capture("http://paypal-verification.com/login")
     ocr = OCRService.extract_text("http://paypal-verification.com/login")
+    phash = ViTService.predict_phash("http://paypal-verification.com/login")
+    phishpedia = ViTService.predict_phishpedia("http://paypal-verification.com/login")
+    vp = ViTService.predict_visualphishnet("http://paypal-verification.com/login")
+    hybrid = ViTService.predict_hybrid_visual("http://paypal-verification.com/login")
+    
     assert "vit_threat_score" in shot
     assert len(ocr) > 0
+    assert phash["algorithm"] == "Perceptual Hashing (pHash + DCT + FAISS)"
+    assert phishpedia["impersonated_target"] == "PayPal"
+    assert vp["algorithm"] == "VisualPhishNet (VGG-16 Triplet Loss CNN)"
+    assert hybrid["hybrid_verdict"] == "PHISHING"
+
 
 
 def test_gnn_and_bert_model_services():
