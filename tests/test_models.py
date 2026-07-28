@@ -45,6 +45,8 @@ def test_whois_and_dns_services():
     dns = DNSService.analyze("http://paypal-verification.com/login")
     assert "registration_age_days" in whois
     assert "dns_records" in dns
+    assert "fast_flux_risk_score" in dns
+    assert "dns_security_verdict" in dns
 
 
 def test_dom_and_js_services():
@@ -57,6 +59,7 @@ def test_dom_and_js_services():
 def test_vision_services():
     shot = ScreenshotService.capture("http://paypal-verification.com/login")
     ocr = OCRService.extract_text("http://paypal-verification.com/login")
+    ocr_analysis = OCRService.analyze_text("http://paypal-verification.com/login")
     phash = ViTService.predict_phash("http://paypal-verification.com/login")
     phishpedia = ViTService.predict_phishpedia("http://paypal-verification.com/login")
     vp = ViTService.predict_visualphishnet("http://paypal-verification.com/login")
@@ -64,6 +67,8 @@ def test_vision_services():
     
     assert "vit_threat_score" in shot
     assert len(ocr) > 0
+    assert "matched_sensitive_keywords" in ocr_analysis
+    assert ocr_analysis["credential_harvester_risk"] is True
     assert phash["algorithm"] == "Perceptual Hashing (pHash + DCT + FAISS)"
     assert phishpedia["impersonated_target"] == "PayPal"
     assert vp["algorithm"] == "VisualPhishNet (VGG-16 Triplet Loss CNN)"
