@@ -152,3 +152,16 @@ def test_batch_scan_endpoint():
     assert data["total_scanned"] == 2
     assert len(data["batch_results"]) == 2
 
+
+def test_screenshot_datasets_endpoints():
+    res1 = client.get("/api/v1/screenshot-datasets")
+    assert res1.status_code == 200
+    d1 = res1.json()
+    assert d1["status"] == "CONNECTED"
+    assert d1["active_connectors"] == 3
+
+    res2 = client.post("/api/v1/screenshot-datasets/connect?dataset_key=all")
+    assert res2.status_code == 200
+    d2 = res2.json()
+    assert d2["total_connected_screenshots"] == 57500
+

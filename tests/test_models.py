@@ -73,6 +73,10 @@ def test_vision_services():
     assert phishpedia["impersonated_target"] == "PayPal"
     assert vp["algorithm"] == "VisualPhishNet (VGG-16 Triplet Loss CNN)"
     assert hybrid["hybrid_verdict"] == "PHISHING"
+    
+    eer = ViTService.optimize_eer("CERT Polska")
+    assert eer["optimal_eer_threshold"] == 8.00
+    assert eer["dataset"] == "CERT Polska"
 
 
 
