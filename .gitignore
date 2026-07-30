@@ -32,4 +32,7 @@ Thumbs.db
 slide_images/
 cv_slide_images/
 
+# Temporary Office Lock Files
+~$*
+
 

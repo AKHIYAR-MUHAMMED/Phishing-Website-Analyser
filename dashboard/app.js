@@ -604,7 +604,7 @@ function drawDOMGraphCanvas(nodeCount, isPhishing) {
     });
 }
 
-// --- Load Dataset Stats ---
+// --- Load Dataset Stats & Screenshot Connectors ---
 async function loadDatasetStats() {
     try {
         const response = await fetch('/api/v1/dataset_stats');
@@ -633,6 +633,13 @@ async function loadDatasetStats() {
                     <td><span class="badge ${row.label == 1 ? 'badge-danger' : 'badge-success'}">${row.label == 1 ? 'Phishing' : 'Legitimate'}</span></td>
                 </tr>
             `).join('');
+        }
+
+        // Fetch connected screenshot datasets metadata
+        const ssResp = await fetch('/api/v1/screenshot-datasets');
+        if (ssResp.ok) {
+            const ssData = await ssResp.json();
+            console.log('[Dashboard] Connected Screenshot Repositories:', ssData);
         }
     } catch (e) {
         console.warn('Dataset stats fetch note:', e);
