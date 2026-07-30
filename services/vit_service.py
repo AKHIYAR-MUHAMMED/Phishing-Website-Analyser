@@ -4,7 +4,15 @@ Exposes endpoints for MDPI 2026 visual detection & target recognition algorithms
 """
 
 from typing import Dict, Any
-from vision_model import analyze_screenshot, get_vit_model, get_hybrid_visual_detector, PerceptualHashEngine, PhishpediaEngine, VisualPhishNetEngine
+from vision_model import (
+    analyze_screenshot,
+    get_vit_model,
+    get_hybrid_visual_detector,
+    PerceptualHashEngine,
+    PhishpediaEngine,
+    VisualPhishNetEngine,
+    EERThresholdOptimizer
+)
 
 
 class ViTService:
@@ -39,3 +47,7 @@ class ViTService:
     def predict_hybrid_visual(url: str) -> Dict[str, Any]:
         detector = get_hybrid_visual_detector()
         return detector.analyze_full_visual_suite(url)
+
+    @staticmethod
+    def optimize_eer(dataset_name: str = "CERT Polska") -> Dict[str, Any]:
+        return EERThresholdOptimizer.optimize_threshold(dataset_name)

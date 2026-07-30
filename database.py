@@ -82,13 +82,13 @@ class AuditLogDB(Base):
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
 
-# Initialize Database Tables
+# Initialize Database Tables & Seed Pre-loaded Full Records
 def init_db():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     
-    # Create Default Admin User if missing
     try:
+        # 1. Create Default Admin User
         admin_user = db.query(UserDB).filter(UserDB.username == "admin").first()
         if not admin_user:
             default_admin = UserDB(
@@ -99,9 +99,34 @@ def init_db():
                 is_active=True
             )
             db.add(default_admin)
-            db.commit()
-    except Exception:
+
+        # 2. Pre-seed Full Scan Results if empty
+        if db.query(ScanResultDB).count() == 0:
+            sample_scans = [
+                ("http://paypal-security-verification-center.com/login", "PHISHING DETECTED", 98.5, "CRITICAL RISK", "BRAND IMPERSONATION & FAKE LOGO SPOOFING"),
+                ("http://login.microsoftonline.security-auth-check.xyz/oauth2", "PHISHING DETECTED", 99.2, "CRITICAL RISK", "CREDENTIAL HARVESTING & EXTERNAL FORM POSTING"),
+                ("http://verify-bankofamerica-account-update.info/signin", "PHISHING DETECTED", 96.8, "CRITICAL RISK", "CLOAKED DOM GRAPH & OBFUSCATED JAVASCRIPT"),
+                ("http://adobe-id-security-auth-login.com/checkpoint", "PHISHING DETECTED", 95.4, "HIGH RISK", "TYPOSQUATTING & SUSPICIOUS DOMAIN"),
+                ("https://github.com/torvalds/linux", "LEGITIMATE SITE", 0.1, "SAFE", "NONE (VERIFIED SAFE INFRASTRUCTURE)"),
+                ("https://www.google.com/search?q=machine+learning", "LEGITIMATE SITE", 0.2, "SAFE", "NONE (VERIFIED SAFE INFRASTRUCTURE)"),
+                ("https://www.amazon.com/dp/B08N5WRWNW", "LEGITIMATE SITE", 0.3, "SAFE", "NONE (VERIFIED SAFE INFRASTRUCTURE)"),
+                ("https://www.apple.com/iphone-15-pro", "LEGITIMATE SITE", 0.1, "SAFE", "NONE (VERIFIED SAFE INFRASTRUCTURE)")
+            ]
+            for url, verdict, score, risk, cat in sample_scans:
+                db.add(ScanResultDB(
+                    target_url=url,
+                    verdict=verdict,
+                    overall_threat_score=score,
+                    risk_level=risk,
+                    attack_category=cat,
+                    confidence_score=99.8,
+                    scan_latency_ms=14,
+                    recommended_actions="Quarantine URL" if "PHISHING" in verdict else "Allow traffic"
+                ))
+        db.commit()
+    except Exception as e:
         db.rollback()
+        print(f"[Database] Warning during seed: {e}")
     finally:
         db.close()
 
@@ -137,4 +162,4 @@ redis_client = MockRedisCache()
 
 if __name__ == "__main__":
     init_db()
-    print("Database tables initialized successfully!")
+    print("Database tables initialized and pre-seeded successfully!")

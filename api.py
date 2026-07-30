@@ -43,6 +43,7 @@ from services import (
     DatasetService,
     DashboardService
 )
+from dataset_loader import BENCHMARK_DATASETS, get_experimental_benchmark_table, get_stratified_split
 from database import get_db, init_db, ScanResultDB, UserDB, AuditLogDB
 from security import get_current_user, create_access_token, hash_password, verify_password
 from mlops_service import MLOpsRegistryManager
@@ -143,6 +144,31 @@ async def phash_endpoint(req: ViTPredictRequest):
 async def visual_hybrid_endpoint(req: ViTPredictRequest):
     """MDPI 2026 Hybrid Visual Detector (pHash Binary Filter + Phishpedia Brand Attribution)."""
     return ViTService.predict_hybrid_visual(req.url)
+
+@app.get("/api/v1/eer-optimize")
+@app.post("/api/v1/eer-optimize")
+async def eer_optimize_endpoint(dataset: str = "CERT Polska"):
+    """Two-Stage Coarse + Fine-Grained Threshold Search Algorithm for EER (FPR=FNR) Optimization."""
+    return ViTService.optimize_eer(dataset)
+
+@app.get("/api/v1/benchmark-comparison")
+async def benchmark_comparison_endpoint():
+    """Returns experimental benchmark table across CERT Polska, PP, VP, and LNU-Phish datasets."""
+    return {
+        "datasets": BENCHMARK_DATASETS,
+        "stratified_split": get_stratified_split(),
+        "benchmark_matrix": get_experimental_benchmark_table()
+    }
+
+@app.get("/api/v1/screenshot-datasets")
+async def get_screenshot_datasets_endpoint():
+    """Returns metadata and status for connected screenshot datasets (LNU-Phish, Phish360, Hugging Face)."""
+    return DatasetService.get_screenshot_datasets()
+
+@app.post("/api/v1/screenshot-datasets/connect")
+async def connect_screenshot_dataset_endpoint(dataset_key: str = "all"):
+    """Connects to LNU-Phish, Phish360, or Hugging Face Phishing Webpage Screenshot datasets."""
+    return DatasetService.connect_screenshot_dataset(dataset_key)
 
 @app.post("/models/bert/predict")
 async def bert_model_endpoint(req: BERTPredictRequest):
