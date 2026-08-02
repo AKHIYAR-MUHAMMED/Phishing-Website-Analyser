@@ -22,7 +22,11 @@ from tests.test_api import (
     test_catboost_model_endpoint,
     test_autoencoder_model_endpoint,
     test_xai_model_endpoint,
-    test_batch_scan_endpoint
+    test_batch_scan_endpoint,
+    test_screenshot_upload_endpoint,
+    test_screenshot_analyze_endpoint,
+    test_dataset_export_and_validate_endpoints,
+    test_fetch_external_datasets_endpoint
 )
 from tests.test_models import (
     test_crawler_service,
@@ -58,6 +62,10 @@ def run_all_tests():
         ("Deep Autoencoder Model Endpoint (POST /models/autoencoder/predict)", test_autoencoder_model_endpoint),
         ("Explainable AI (XAI) Endpoint (POST /models/xai/predict)", test_xai_model_endpoint),
         ("Parallel Batch Scan Endpoint (POST /api/v1/batch-scan)", test_batch_scan_endpoint),
+        ("Screenshot Multipart File Upload Endpoint (POST /api/v1/screenshot/upload)", test_screenshot_upload_endpoint),
+        ("Screenshot JSON Analysis Endpoint (POST /api/v1/screenshot/analyze)", test_screenshot_analyze_endpoint),
+        ("Dataset Export & Integrity Validation Endpoints (GET /api/v1/datasets/export & validate)", test_dataset_export_and_validate_endpoints),
+        ("Live External Dataset Collector Endpoint (POST /api/v1/datasets/fetch-external)", test_fetch_external_datasets_endpoint),
         ("Crawler & Ingestion Service (CrawlerService)", test_crawler_service),
         ("SSL & TLS Certificate Service (SSLService)", test_ssl_service),
         ("WHOIS & DNS Intelligence Services (WHOISService, DNSService)", test_whois_and_dns_services),

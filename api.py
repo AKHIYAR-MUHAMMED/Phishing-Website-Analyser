@@ -15,7 +15,7 @@ import os
 import time
 import asyncio
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Request, Depends, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -103,6 +103,11 @@ class CompareLLMRequest(BaseModel):
     url: str
     dom_snippet: Optional[str] = ""
 
+class ScreenshotAnalyzeRequest(BaseModel):
+    url: Optional[str] = ""
+    image_path: Optional[str] = ""
+    base64_data: Optional[str] = ""
+
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard():
@@ -169,6 +174,48 @@ async def get_screenshot_datasets_endpoint():
 async def connect_screenshot_dataset_endpoint(dataset_key: str = "all"):
     """Connects to LNU-Phish, Phish360, or Hugging Face Phishing Webpage Screenshot datasets."""
     return DatasetService.connect_screenshot_dataset(dataset_key)
+
+@app.get("/api/v1/datasets/export")
+@app.post("/api/v1/datasets/export")
+async def export_dataset_endpoint():
+    """Compiles and exports the unified multimodal dataset package ready for external publishing."""
+    return DatasetService.export_publishing_package()
+
+@app.get("/api/v1/datasets/validate")
+async def validate_dataset_endpoint():
+    """Runs automated dataset integrity, non-null, and screenshot file existence checks."""
+    return DatasetService.validate_dataset()
+
+@app.post("/api/v1/datasets/fetch-external")
+@app.get("/api/v1/datasets/fetch-external")
+async def fetch_external_datasets_endpoint():
+    """Connects to live official URLs (LNU-Phish, Phish360, Hugging Face) and fetches external dataset metadata & assets."""
+    return DatasetService.fetch_external_datasets()
+
+@app.post("/api/v1/screenshot/upload")
+async def upload_screenshot_endpoint(file: UploadFile = File(...), target_url: Optional[str] = Form(None)):
+    """
+    Accepts direct image file upload (PNG/JPG/WEBP) for visual AI phishing verification.
+    """
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="No screenshot image file uploaded.")
+    contents = await file.read()
+    return ScreenshotService.analyze_upload(
+        file_bytes=contents,
+        filename=file.filename,
+        target_url=target_url or ""
+    )
+
+@app.post("/api/v1/screenshot/analyze")
+async def analyze_screenshot_endpoint(req: ScreenshotAnalyzeRequest):
+    """
+    Analyzes a screenshot image path, base64 payload, or target webpage URL screenshot.
+    """
+    return ScreenshotService.analyze_upload(
+        target_url=req.url or "",
+        filename=req.image_path or "screenshot.png",
+        base64_data=req.base64_data or ""
+    )
 
 @app.post("/models/bert/predict")
 async def bert_model_endpoint(req: BERTPredictRequest):

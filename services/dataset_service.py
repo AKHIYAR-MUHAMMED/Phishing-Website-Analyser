@@ -9,8 +9,11 @@ from dataset_loader import (
     BENCHMARK_DATASETS,
     get_experimental_benchmark_table,
     get_stratified_split,
-    ScreenshotDatasetConnector
+    ScreenshotDatasetConnector,
+    export_dataset_for_publishing,
+    validate_dataset_integrity
 )
+from external_dataset_collector import ExternalDatasetAggregator
 
 
 class DatasetService:
@@ -25,7 +28,7 @@ class DatasetService:
         sample_preview = df.head(30).to_dict(orient="records")
 
         return {
-            "dataset_name": "PhishGuard-X Unified Multimodal Dataset (4 Kaggle Streams + 3 Screenshot Connectors)",
+            "dataset_name": "PhishGuard-X Unified Multimodal Dataset (4 Kaggle Streams + 6 Screenshot Connectors)",
             "source_streams": [
                 {"source": "duygujones/website-phishing-detection-ml-project", "samples": 2500, "ratio": "25.0%", "type": "UCI Structural Features"},
                 {"source": "waawerufidelis/website-phishing", "samples": 2500, "ratio": "25.0%", "type": "Website Phishing Benchmark"},
@@ -33,6 +36,7 @@ class DatasetService:
                 {"source": "sindhi586/phishing-domain-detection-project", "samples": 2500, "ratio": "25.0%", "type": "Phishing Domain Indicators"}
             ],
             "screenshot_connectors": ScreenshotDatasetConnector.list_connected_datasets(),
+            "live_external_collections": ExternalDatasetAggregator.get_cached_or_collect(),
             "total_samples": total_samples,
             "total_features": len(feature_cols),
             "train_split": "6,000 samples (60%)",
@@ -60,5 +64,19 @@ class DatasetService:
         return ScreenshotDatasetConnector.get_dataset_payload(dataset_key)
 
     @staticmethod
+    def fetch_external_datasets() -> Dict[str, Any]:
+        return ExternalDatasetAggregator.collect_all()
+
+    @staticmethod
     def regenerate_dataset(num_samples: int = 10000):
         return generate_authentic_kaggle_phishing_dataset(num_samples)
+
+    @staticmethod
+    def export_publishing_package(output_csv: str = None, output_json: str = None) -> Dict[str, Any]:
+        return export_dataset_for_publishing(output_csv, output_json)
+
+    @staticmethod
+    def validate_dataset(csv_path: str = None) -> Dict[str, Any]:
+        return validate_dataset_integrity(csv_path)
+
+

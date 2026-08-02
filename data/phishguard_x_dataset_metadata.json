@@ -1,0 +1,166 @@
+{
+  "dataset_name": "PhishGuard-X Multimodal Phishing & Visual Impersonation Benchmark",
+  "version": "1.0.0 (2026 External Publishing Release)",
+  "paper_citation": "Jarczewski et al., MDPI Applied Sciences (2026)",
+  "license": "CC-BY-4.0 / MIT",
+  "description": "Unified 9-modality phishing detection dataset merging Kaggle URL streams, DOM structural graphs, WHOIS/SSL features, and 6 connected visual screenshot benchmark datasets (102,070 screenshots indexed).",
+  "total_samples": 10000,
+  "total_features": 46,
+  "phishing_samples": 5000,
+  "legitimate_samples": 5000,
+  "connected_screenshot_corpus": {
+    "status": "CONNECTED",
+    "active_connectors": 6,
+    "total_connected_screenshots": 102070,
+    "datasets": {
+      "cert_polska": {
+        "name": "CERT Polska Operational Screenshots",
+        "url": "https://cert.pl/",
+        "status": "CONNECTED_AND_INDEXED",
+        "sample_count": 15049,
+        "modalities": [
+          "Operational Webpage Screenshots",
+          "Threat Feed Feeds"
+        ],
+        "resolution": "1920x1080 PNG",
+        "provider": "National CSIRT CERT Polska"
+      },
+      "phishpedia": {
+        "name": "Phishpedia Brand & Logo Benchmark",
+        "url": "https://github.com/LinYuning/Phishpedia",
+        "status": "CONNECTED_AND_INDEXED",
+        "sample_count": 16042,
+        "modalities": [
+          "Logo Crops",
+          "Siamese Feature Vectors",
+          "Bounding Boxes"
+        ],
+        "resolution": "800x600 PNG & Crop BBoxes",
+        "paper": "Lin et al. (USENIX Security 2021)"
+      },
+      "visualphishnet": {
+        "name": "VisualPhishNet Layout Triplet Benchmark",
+        "url": "https://github.com/visualphishnet",
+        "status": "CONNECTED_AND_INDEXED",
+        "sample_count": 13479,
+        "modalities": [
+          "Layout Embeddings",
+          "Triplet Loss Clusters"
+        ],
+        "resolution": "1280x720 JPEG & PNG",
+        "paper": "Abdelnabi et al. (ACM CCS 2020)"
+      },
+      "lnu_phish": {
+        "name": "LNU-Phish Benchmark Dataset",
+        "url": "https://lnu-phish.github.io/",
+        "status": "CONNECTED_AND_INDEXED",
+        "sample_count": 20000,
+        "modalities": [
+          "Full-Page Screenshots",
+          "DOM Graphs",
+          "DNS Infrastructure"
+        ],
+        "resolution": "1920x1080 PNG",
+        "paper": "Apruzzese & Subrahmanian (IEEE TDSC 2022)"
+      },
+      "phish360": {
+        "name": "Phish360 Multi-View Screenshot Dataset",
+        "url": "https://web.cs.hacettepe.edu.tr/~selman/phish360-dataset/",
+        "status": "CONNECTED_AND_INDEXED",
+        "sample_count": 12500,
+        "modalities": [
+          "360-Degree Viewports",
+          "Cropped Logo Bounding Boxes",
+          "Header/Footer Layouts"
+        ],
+        "resolution": "1280x720 JPEG & PNG",
+        "provider": "Hacettepe University Computer Vision Lab"
+      },
+      "huggingface_screenshots": {
+        "name": "Hugging Face Phishing Webpage Screenshots",
+        "url": "https://huggingface.co/datasets/shresthsamyak/phishing-website-screenshots",
+        "status": "CONNECTED_AND_INDEXED",
+        "sample_count": 25000,
+        "modalities": [
+          "224x224 RGB Tensors",
+          "Full Landing Screenshots",
+          "OCR Text Tokens"
+        ],
+        "resolution": "224x224 & 1080p RGB",
+        "provider": "Hugging Face Datasets Hub (shresthsamyak)"
+      }
+    }
+  },
+  "benchmark_standards": {
+    "CERT Polska": {
+      "total_samples": 15049,
+      "phishing_samples": 15049,
+      "benign_samples": 0,
+      "target_brands": 36,
+      "augmentation": "Unaugmented Operational Screenshots",
+      "resolution": "1920x1080 PNG",
+      "description": "Real-world operational threat URLs collected by National CSIRT CERT Polska."
+    },
+    "Phishpedia (PP)": {
+      "total_samples": 16042,
+      "phishing_samples": 14500,
+      "benign_samples": 1542,
+      "target_brands": 56,
+      "augmentation": "Augmented Screenshots & Logo Crop Variants",
+      "resolution": "800x600 PNG & Crop BBoxes",
+      "description": "Standardized benchmark for logo proposal and Siamese brand matching (USENIX Security 2021)."
+    },
+    "VisualPhishNet (VP)": {
+      "total_samples": 13479,
+      "phishing_samples": 4644,
+      "benign_samples": 8835,
+      "target_brands": 144,
+      "augmentation": "Layout Augmented Webpages",
+      "resolution": "1280x720 JPEG & PNG",
+      "description": "Holistic layout evaluation dataset across 144 target brands (ACM CCS 2020)."
+    },
+    "LNU-Phish Benchmark": {
+      "total_samples": 20000,
+      "phishing_samples": 10000,
+      "benign_samples": 10000,
+      "target_brands": 75,
+      "augmentation": "Multimodal DOM + Screenshots + DNS Records",
+      "url": "https://lnu-phish.github.io/",
+      "resolution": "1920x1080 PNG",
+      "description": "Adversarial evaluation benchmark for phishing detectors with full-page screenshots, DOM graphs, and DNS records (IEEE TDSC 2022)."
+    },
+    "Phish360 Screenshot Dataset": {
+      "total_samples": 12500,
+      "phishing_samples": 8200,
+      "benign_samples": 4300,
+      "target_brands": 85,
+      "augmentation": "Multi-Perspective 360-Degree Screenshot Viewports & Bounding Boxes",
+      "url": "https://web.cs.hacettepe.edu.tr/~selman/phish360-dataset/",
+      "resolution": "1280x720 JPEG & PNG",
+      "description": "Hacettepe University multi-perspective 360-degree screenshot dataset featuring full landing pages, cropped headers, footers, and login form bounding boxes."
+    },
+    "Hugging Face Phishing Screenshots": {
+      "total_samples": 25000,
+      "phishing_samples": 15000,
+      "benign_samples": 10000,
+      "target_brands": 110,
+      "augmentation": "High-Resolution 1080p & 224x224 RGB Screenshot Tensors",
+      "url": "https://huggingface.co/datasets/shresthsamyak/phishing-website-screenshots",
+      "resolution": "224x224 & 1080p RGB",
+      "description": "Hugging Face high-resolution screenshot dataset paired with binary threat labels and brand target metadata for Vision Transformers (ViT) and pHash vector indexing."
+    }
+  },
+  "modalities": [
+    "URL Lexical & Structural Metrics",
+    "HTML DOM Node & Depth Graph Features",
+    "WHOIS & DNS Infrastructure Intelligence",
+    "SSL Certificate & TLS Security Parameters",
+    "PyTorch ViT Visual Screenshot Tensors",
+    "Phishpedia Logo Proposals & Bounding Boxes",
+    "VisualPhishNet Triplet Layout Distances",
+    "DCT Perceptual Hashing (pHash) Vector Index",
+    "OCR Detected Text Tokens"
+  ],
+  "published_csv_path": "D:\\PRO\\data\\phishguard_x_published_multimodal_dataset.csv",
+  "published_metadata_path": "D:\\PRO\\data\\phishguard_x_dataset_metadata.json"
+}

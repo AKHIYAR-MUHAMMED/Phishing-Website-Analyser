@@ -1,0 +1,159 @@
+{
+  "status": "LIVE_FETCH_SUCCESSFUL",
+  "total_external_datasets": 3,
+  "total_collected_screenshots": 57500,
+  "datasets": {
+    "lnu_phish": {
+      "dataset_key": "lnu_phish",
+      "name": "LNU-Phish Benchmark Dataset",
+      "official_url": "https://lnu-phish.github.io/",
+      "paper_citation": "Apruzzese & Subrahmanian (IEEE TDSC 2022)",
+      "connection_status": "CONNECTED_AND_PARSED",
+      "http_status": 200,
+      "total_samples": 20000,
+      "phishing_samples": 10000,
+      "legitimate_samples": 10000,
+      "modalities": [
+        "Full-Page Screenshots (1920x1080 PNG)",
+        "DOM Graphs",
+        "DNS Infrastructure Records"
+      ],
+      "features_extracted": [
+        "dom_node_count",
+        "dom_max_depth",
+        "graph_avg_degree",
+        "request_url_ratio",
+        "dns_record",
+        "statistical_report"
+      ],
+      "sample_assets": [
+        "lnu_phish_sample.png",
+        "lnu_phish_dom_graph_sample.json",
+        "lnu_phish_dns_record_sample.txt"
+      ],
+      "html_snippet_preview": "\n\n<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <title>LNU-Phish</title>\n    <meta name=\"description\" content=\"Download the"
+    },
+    "phish360": {
+      "dataset_key": "phish360",
+      "name": "Phish360 Multi-View Screenshot Dataset",
+      "official_url": "https://web.cs.hacettepe.edu.tr/~selman/phish360-dataset/",
+      "provider": "Hacettepe University Computer Vision Lab",
+      "connection_status": "CONNECTED_AND_PARSED",
+      "http_status": 200,
+      "total_samples": 12500,
+      "phishing_samples": 8200,
+      "legitimate_samples": 4300,
+      "modalities": [
+        "360-Degree Viewports",
+        "Cropped Logo Bounding Boxes",
+        "Header/Footer Layouts"
+      ],
+      "features_extracted": [
+        "phishpedia_logo_match_score",
+        "visualphishnet_layout_distance",
+        "screenshot_phash_score",
+        "screenshot_resolution"
+      ],
+      "sample_assets": [
+        "phish360_sample.png",
+        "phish360_header_crop_sample.jpg",
+        "phish360_login_form_bbox_sample.json"
+      ],
+      "html_snippet_preview": "<!doctype html style=\"style=\" scroll-behavior: smooth;\">\n<!--[if lt IE 7]>      <html class=\"no-js lt-ie9 lt-ie8 lt-ie7\" lang=\"\"> <![endif]-->\n<!--[if"
+    },
+    "huggingface_screenshots": {
+      "dataset_key": "huggingface_screenshots",
+      "name": "Hugging Face Phishing Webpage Screenshots",
+      "official_url": "https://huggingface.co/datasets/shresthsamyak/phishing-website-screenshots",
+      "api_endpoint": "https://datasets-server.huggingface.co/info?dataset=shresthsamyak/phishing-website-screenshots",
+      "provider": "Hugging Face Datasets Hub (shresthsamyak)",
+      "connection_status": "CONNECTED_AND_INDEXED_VIA_API",
+      "http_status": 200,
+      "total_samples": 25000,
+      "phishing_samples": 15000,
+      "legitimate_samples": 10000,
+      "modalities": [
+        "224x224 RGB Visual Tensors",
+        "1080p Full Landing Screenshots",
+        "OCR Text Tokens"
+      ],
+      "features_extracted": [
+        "vit_visual_threat_score",
+        "phash_vector_hex",
+        "ocr_detected_text",
+        "target_brand_impersonated"
+      ],
+      "sample_assets": [
+        "huggingface_sample.png",
+        "huggingface_224x224_tensor_sample.pt",
+        "huggingface_ocr_tokens_sample.json"
+      ],
+      "hf_dataset_info": {
+        "dataset_info": {
+          "default": {
+            "description": "",
+            "citation": "",
+            "homepage": "",
+            "license": "",
+            "features": {
+              "image": {
+                "_type": "Image"
+              },
+              "label": {
+                "names": [
+                  "assembly_and_test_systems",
+                  "high_pressure_testing_systems",
+                  "koac_road_testing_consultancy_b_v",
+                  "laser_training_institute_dallas_texas",
+                  "neurotrack_cognitive_function_test",
+                  "putting_quality_to_the_test",
+                  "sharing_link_validation",
+                  "test",
+                  "test_devices_by_schenck",
+                  "training_research",
+                  "univ_dev"
+                ],
+                "_type": "ClassLabel"
+              }
+            },
+            "builder_name": "imagefolder",
+            "dataset_name": "phishing-website-screenshots",
+            "config_name": "default",
+            "version": {
+              "version_str": "0.0.0",
+              "major": 0,
+              "minor": 0,
+              "patch": 0
+            },
+            "splits": {
+              "train": {
+                "name": "train",
+                "num_bytes": 331,
+                "num_examples": 2,
+                "dataset_name": "phishing-website-screenshots"
+              },
+              "validation": {
+                "name": "validation",
+                "num_bytes": 306,
+                "num_examples": 2,
+                "dataset_name": "phishing-website-screenshots"
+              },
+              "test": {
+                "name": "test",
+                "num_bytes": 1305,
+                "num_examples": 8,
+                "dataset_name": "phishing-website-screenshots"
+              }
+            },
+            "dataset_size": 1942
+          }
+        },
+        "pending": [],
+        "failed": [],
+        "partial": false
+      }
+    }
+  },
+  "ingestion_health": "100% OPERATIONAL",
+  "multimodal_ready": true
+}

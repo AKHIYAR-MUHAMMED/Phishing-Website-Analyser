@@ -542,3 +542,63 @@ body {
     color: #38bdf8;
 }
 
+/* Screenshot Verification & Drag and Drop Dropzone */
+.upload-dropzone-card {
+    background: rgba(15, 23, 42, 0.6);
+    border: 2px dashed rgba(168, 85, 247, 0.4);
+    border-radius: 12px;
+    padding: 32px 20px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.upload-dropzone-card:hover, .upload-dropzone-card.drag-over {
+    border-color: #a855f7;
+    background: rgba(168, 85, 247, 0.1);
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.25);
+}
+
+.dropzone-icon {
+    font-size: 42px;
+    color: #c084fc;
+    margin-bottom: 12px;
+    transition: transform 0.3s ease;
+}
+
+.upload-dropzone-card:hover .dropzone-icon {
+    transform: translateY(-4px) scale(1.1);
+}
+
+.hidden-file-input {
+    display: none;
+}
+
+.ss-thumbnail-box {
+    width: 220px;
+    height: 140px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: #020617;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ss-thumbnail-box img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.ss-preset {
+    font-size: 0.75rem !important;
+    padding: 6px 12px !important;
+}
+
+
