@@ -1,224 +1,197 @@
 """
-PhishGuard-X Service-Oriented API Gateway Automated Test Suite.
-Tests endpoints:
-- POST /models/gnn/predict
-- POST /models/vit/predict
-- POST /models/bert/predict
-- POST /models/fusion/predict
-- POST /api/v1/scan
-- GET /dashboard/system
-- GET /dashboard/datasets
-- GET /api/v1/health
+API behaviour tests (Phase 1 honesty pass).
+
+These tests check that the API reports genuine observations, explicit unavailable states and
+measured values. They do not assert any metric, score or verdict value.
 """
 
+import pytest
 from fastapi.testclient import TestClient
+
 from api import app
+from component_status import AVAILABLE, HEURISTIC, NOT_EVALUATED, NOT_IMPLEMENTED, UNAVAILABLE
+from multimodal_fusion import DISABLED_MODALITIES
 
 client = TestClient(app)
 
+ALLOWED_STATUSES = {AVAILABLE, HEURISTIC, UNAVAILABLE, NOT_IMPLEMENTED, NOT_EVALUATED}
 
-def test_health_check():
+LOGIN_PAGE = (
+    "<html><head><title>Sign in</title></head><body>"
+    "<form action='http://collector.example.net/post'>"
+    "<input type='text' name='user'><input type='password' name='pw'></form>"
+    "<div style='display:none'>hidden</div>"
+    "<script>eval('x')</script></body></html>"
+)
+
+
+def test_health_reports_process_only():
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "OPERATIONAL"
+    assert response.json() == {"status": "ok"}
 
 
-def test_dedicated_gnn_model_endpoint():
-    payload = {"url": "http://paypal-security-check.com/login", "html_content": "<input type='password'>"}
-    response = client.post("/models/gnn/predict", json=payload)
+def test_scan_returns_no_verdict_without_trained_model():
+    response = client.post("/api/v1/scan", json={"url": "http://login.example.com/verify", "html_content": LOGIN_PAGE})
     assert response.status_code == 200
     data = response.json()
-    assert "gnn_threat_score" in data
-    assert "PyTorch" in data["model_name"]
+    assert data["verdict"] is None
+    assert data["phishing_probability"] is None
+    assert data["decision"]["status"] == UNAVAILABLE
+    assert data["decision"]["reason"]
+    assert data["explanation"]["status"] == UNAVAILABLE
 
 
-def test_dedicated_vit_model_endpoint():
-    payload = {"url": "http://paypal-security-check.com/login", "image_path": ""}
-    response = client.post("/models/vit/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "vit_threat_score" in data
-    assert "detected_logo" in data
+def test_scan_reports_observed_dom_structure_from_supplied_html():
+    data = client.post("/api/v1/scan", json={"url": "http://login.example.com/", "html_content": LOGIN_PAGE}).json()
+    dom = data["modalities"]["dom_graph"]
+    assert data["crawl"]["status"] == AVAILABLE
+    assert data["crawl"]["source"] == "request_html_content"
+    assert dom["status"] == AVAILABLE
+    assert dom["form_nodes"] == 1
+    assert dom["password_input_nodes"] == 1
+    assert dom["hidden_nodes"] == 1
+    assert dom["graph_node_count"] == dom["total_html_elements"]
 
 
-def test_dedicated_bert_model_endpoint():
-    payload = {"url": "http://paypal-security-check.com/login"}
-    response = client.post("/models/bert/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "bert_threat_score" in data
-    assert "semantic_intent_verdict" in data
+def test_scan_without_html_does_not_invent_a_page():
+    data = client.post("/api/v1/scan", json={"url": "https://example.com"}).json()
+    assert data["crawl"]["status"] == UNAVAILABLE
+    assert data["modalities"]["dom_graph"]["status"] == UNAVAILABLE
+    assert data["modalities"]["js_indicators"]["status"] == UNAVAILABLE
+    assert data["modalities"]["url_features"]["status"] == AVAILABLE
 
 
-def test_dedicated_fusion_model_endpoint():
-    payload = {"url": "http://paypal-security-check.com/login", "html_content": ""}
-    response = client.post("/models/fusion/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "overall_threat_score" in data
-    assert "PHISHING" in data["final_verdict"]
+def test_scan_marks_simulated_modalities_unavailable():
+    data = client.post("/api/v1/scan", json={"url": "http://paypal-account-update.com/login"}).json()
+    for name in DISABLED_MODALITIES + ("gnn",):
+        section = data["modalities"][name]
+        assert section["status"] == UNAVAILABLE, name
+        assert section["reason"], name
+        assert set(section) == {"component", "status", "reason"}, name
 
 
-def test_central_api_gateway_scan_pipeline():
-    payload = {"url": "http://paypal-security-verification-center.com/signin?account_login=update", "html_content": ""}
-    response = client.post("/api/v1/scan", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "final_verdict" in data
-    assert data["overall_threat_score"] > 50.0
-    assert "xai_evidence_matrix" in data
+def test_scan_rejects_empty_url():
+    assert client.post("/api/v1/scan", json={"url": "   "}).status_code == 400
 
 
-def test_dashboard_system_endpoint():
-    response = client.get("/dashboard/system")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "OPERATIONAL"
-    assert data["active_modalities"] == 9
+@pytest.mark.parametrize("path", ["/api/v1/detect", "/models/fusion/predict"])
+def test_scan_aliases_use_same_pipeline(path):
+    data = client.post(path, json={"url": "https://example.com"}).json()
+    assert data["verdict"] is None
+    assert "modalities" in data
 
 
-def test_dashboard_datasets_endpoint():
-    response = client.get("/dashboard/datasets")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total_samples"] == 10000
-    assert data["test_accuracy"] == "100.00%"
-
-
-def test_llm_list_endpoint():
-    response = client.get("/models/llm/list")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total_engines"] == 10
-    assert len(data["engines"]) == 10
-
-
-def test_single_llm_endpoint():
-    payload = {"url": "http://paypal-security-check.com/login"}
-    response = client.post("/models/llm/gpt55/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "threat_score" in data
-    assert "verdict" in data
-
-
-def test_compare_llm_endpoint():
-    payload = {"engine_ids": ["gpt55", "claude4opus", "deepseekv3"], "url": "http://paypal-security-check.com/login"}
-    response = client.post("/models/llm/compare", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["compared_engines_count"] == 3
-    assert "comparison_verdict" in data
-
-
-def test_rf_model_endpoint():
-    payload = {"url": "http://paypal-security-check.com/login"}
-    response = client.post("/models/rf/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["model_name"] == "Random Forest Classifier"
-
-
-def test_catboost_model_endpoint():
-    payload = {"url": "http://paypal-security-check.com/login"}
-    response = client.post("/models/catboost/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["model_name"] == "CatBoost Gradient Boosting"
-
-
-def test_autoencoder_model_endpoint():
-    payload = {"url": "http://paypal-security-check.com/login"}
-    response = client.post("/models/autoencoder/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "anomaly_score" in data
-
-
-def test_xai_model_endpoint():
-    payload = {"url": "http://paypal-security-check.com/login"}
-    response = client.post("/models/xai/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) > 0
-
-
-def test_batch_scan_endpoint():
-    payload = {"urls": ["http://paypal-security-check.com/login", "https://github.com/torvalds/linux"]}
-    response = client.post("/api/v1/batch-scan", json=payload)
+def test_batch_scan_returns_no_verdicts():
+    response = client.post("/api/v1/batch-scan", json={"urls": ["http://a.example", "https://b.example"]})
     assert response.status_code == 200
     data = response.json()
     assert data["total_scanned"] == 2
-    assert len(data["batch_results"]) == 2
+    for row in data["batch_results"]:
+        assert row["verdict"] is None
+        assert row["phishing_probability"] is None
 
 
-def test_screenshot_datasets_endpoints():
-    res1 = client.get("/api/v1/screenshot-datasets")
-    assert res1.status_code == 200
-    d1 = res1.json()
-    assert d1["status"] == "CONNECTED"
-    assert d1["active_connectors"] == 6
-
-    res2 = client.post("/api/v1/screenshot-datasets/connect?dataset_key=all")
-    assert res2.status_code == 200
-    d2 = res2.json()
-    assert d2["total_connected_screenshots"] == 102070
+def test_batch_scan_rejects_empty_list():
+    assert client.post("/api/v1/batch-scan", json={"urls": []}).status_code == 400
 
 
-def test_dataset_export_and_validate_endpoints():
-    res_export = client.get("/api/v1/datasets/export")
-    assert res_export.status_code == 200
-    d_exp = res_export.json()
-    assert d_exp["status"] == "SUCCESSFULLY_PUBLISHED"
-    assert "csv_path" in d_exp
-    assert "json_path" in d_exp
-
-    res_val = client.get("/api/v1/datasets/validate")
-    assert res_val.status_code == 200
-    d_val = res_val.json()
-    assert d_val["status"] == "VALID"
-    assert d_val["null_value_count"] == 0
-    assert d_val["missing_screenshot_files"] == 0
+def test_gnn_endpoint_returns_structure_but_no_model_output():
+    data = client.post("/models/gnn/predict", json={"url": "http://x.example", "html_content": LOGIN_PAGE}).json()
+    assert data["model"]["status"] == UNAVAILABLE
+    assert data["dom_graph"]["status"] == AVAILABLE
 
 
-def test_fetch_external_datasets_endpoint():
-    response = client.post("/api/v1/datasets/fetch-external")
-    assert response.status_code == 200
+@pytest.mark.parametrize("path,body", [
+    ("/models/vit/predict", {"url": "http://x.example"}),
+    ("/models/phishpedia/predict", {"url": "http://x.example"}),
+    ("/models/visualphishnet/predict", {"url": "http://x.example"}),
+    ("/models/phash/predict", {"url": "http://x.example"}),
+    ("/models/visual-hybrid/predict", {"url": "http://x.example"}),
+    ("/api/v1/screenshot/analyze", {"url": "http://x.example"}),
+    ("/models/bert/predict", {"url": "http://x.example"}),
+    ("/models/ensemble/predict", {"url": "http://x.example"}),
+    ("/models/rf/predict", {"url": "http://x.example"}),
+    ("/models/catboost/predict", {"url": "http://x.example"}),
+    ("/models/autoencoder/predict", {"url": "http://x.example"}),
+    ("/models/xai/predict", {"url": "http://x.example"}),
+    ("/api/v1/eer-optimize", None),
+    ("/api/v1/screenshot-datasets/connect", None),
+    ("/api/v1/datasets/fetch-external", None),
+    ("/api/v1/datasets/export", None),
+    ("/api/v1/auth/login", {"username": "admin", "password": "admin123"}),
+])
+def test_disabled_components_return_501_with_reason(path, body):
+    response = client.post(path, json=body) if body is not None else client.post(path)
+    assert response.status_code == 501
     data = response.json()
-    assert "total_external_datasets" in data
-    assert data["total_external_datasets"] == 3
-    assert "datasets" in data
-    assert "lnu_phish" in data["datasets"]
-    assert "phish360" in data["datasets"]
-    assert "huggingface_screenshots" in data["datasets"]
+    assert data["status"] == UNAVAILABLE
+    assert data["reason"]
 
 
-def test_screenshot_upload_endpoint():
-    # Test uploading dummy PNG byte stream
-    dummy_png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+@pytest.mark.parametrize("path", ["/api/v1/benchmark-comparison", "/api/v1/screenshot-datasets"])
+def test_disabled_get_endpoints_return_501(path):
+    assert client.get(path).status_code == 501
+
+
+def test_screenshot_upload_is_not_stored_or_analysed():
     response = client.post(
         "/api/v1/screenshot/upload",
-        files={"file": ("test_phishing_screenshot.png", dummy_png_bytes, "image/png")},
-        data={"target_url": "http://paypal-security-check.com/login"}
+        files={"file": ("upload.png", b"\x89PNG\r\n\x1a\n", "image/png")},
     )
+    assert response.status_code == 501
+    assert response.json()["status"] == UNAVAILABLE
+
+
+def test_metrics_are_not_evaluated():
+    data = client.get("/api/v1/metrics").json()
+    assert data["status"] == NOT_EVALUATED
+    assert data["metrics"] is None
+
+
+@pytest.mark.parametrize("path", ["/dashboard/history", "/api/v1/history", "/dashboard/datasets", "/api/v1/dataset_stats"])
+def test_history_and_dataset_are_unavailable(path):
+    data = client.get(path).json()
+    assert data["status"] == UNAVAILABLE
+    assert data["reason"]
+
+
+@pytest.mark.parametrize("path", ["/dashboard/system", "/api/v1/dashboard", "/dashboard/models", "/api/v1/model_info"])
+def test_component_status_lists_every_component_with_reason(path):
+    components = client.get(path).json()["components"]
+    assert components
+    for comp in components:
+        assert comp["status"] in ALLOWED_STATUSES, comp
+        assert comp["reason"], comp
+
+
+def test_llm_list_reports_implementation_and_key_status():
+    data = client.get("/models/llm/list").json()
+    assert data["listed_engines"] == len(data["engines"])
+    assert data["implemented_engines"] == sum(1 for e in data["engines"] if e["implemented"])
+    assert all(e["api_key_configured"] is False for e in data["engines"])
+    assert all(e["model_id_verified"] is False for e in data["engines"])
+
+
+def test_single_llm_without_key_is_unavailable():
+    data = client.post("/models/llm/gpt55/predict", json={"url": "http://x.example"}).json()
+    assert data["status"] == UNAVAILABLE
+    assert "threat_score" not in data and "verdict" not in data
+
+
+def test_unknown_llm_engine_is_404():
+    assert client.post("/models/llm/not-an-engine/predict", json={"url": "http://x.example"}).status_code == 404
+
+
+def test_llm_compare_reports_unknown_ids():
+    data = client.post("/models/llm/compare", json={"engine_ids": ["gpt55", "nope"], "url": "http://x.example"}).json()
+    assert data["unknown_engine_ids"] == ["nope"]
+    assert data["engines_ok"] == 0
+
+
+def test_dataset_validate_runs_genuine_file_check():
+    response = client.get("/api/v1/datasets/validate")
     assert response.status_code == 200
     data = response.json()
-    assert "vit_threat_score" in data
-    assert "detected_logo" in data
-    assert "file_info" in data
-    assert data["file_info"]["filename"] == "test_phishing_screenshot.png"
-
-
-def test_screenshot_analyze_endpoint():
-    payload = {
-        "url": "http://paypal-security-verification-center.com/signin",
-        "image_path": "sample_paypal.png"
-    }
-    response = client.post("/api/v1/screenshot/analyze", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "vit_threat_score" in data
-    assert "mdpi_2026_visual_suite" in data
-
-
+    assert data["status"] in ("VALID", "INVALID")
+    assert "note" in data
