@@ -1,29 +1,16 @@
 """
-JavaScript AST Obfuscation & Cloaking Analysis Service.
+JavaScript indicator service.
+
+Regex pattern counts over script text and HTML. This is a heuristic, not an AST parser,
+and it produces no risk score.
 """
 
-import logging
-from typing import Dict, Any
-from collectors import JavascriptASTParser
+from typing import Any, Dict
 
-logger = logging.getLogger(__name__)
+from multimodal_fusion import analyse_javascript
 
 
 class JavaScriptService:
-    """Microservice interface for evaluating JavaScript code obfuscation and AST safety indicators."""
-
     @staticmethod
     def parse(js_code: str, html_content: str = "") -> Dict[str, Any]:
-        """Parses JavaScript script contents and associated DOM HTML to detect obfuscation indicators."""
-        try:
-            return JavascriptASTParser.parse_script(js_code, html_content)
-        except Exception as err:
-            logger.error("Failed to parse JavaScript AST: %s", str(err), exc_info=True)
-            return {
-                "ast_score": 0.0,
-                "eval_calls": 0,
-                "obfuscated": False,
-                "entropy": 0.0,
-                "error": str(err)
-            }
-
+        return analyse_javascript(" ".join(part for part in (js_code, html_content) if part))

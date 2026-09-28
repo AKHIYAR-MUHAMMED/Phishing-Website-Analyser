@@ -1,57 +1,39 @@
 """
-PhishGuard-X API Gateway & Service-Oriented Microservice Backend.
-All operations route through the centralized service layer:
-- /models/gnn/predict (GNN Service)
-- /models/vit/predict (Vision Transformer Service)
-- /models/bert/predict (BERT NLP Service)
-- /models/ensemble/predict (Classical ML & Autoencoder Service)
-- /models/llm/predict (10-LLM Bayesian Orchestrator Service)
-- /models/fusion/predict (Multimodal Fusion Service)
-- /api/v1/scan & /api/v1/detect (Sequential 32-Step Microservice Pipeline)
-- /dashboard/* (System, Models, Graphs, LLM, Datasets, History, Logs)
+PhishGuard API gateway.
+
+Phase 0 honesty pass:
+- /api/v1/scan (alias /api/v1/detect) runs the scan pipeline ONCE and returns genuine
+  observations plus the status of every modality. It returns no verdict until a trained
+  fusion model exists. Latency is measured.
+- Endpoints whose component was simulated respond with HTTP 501 and an explicit reason.
+- Status endpoints (metrics, history, datasets, system) report "not_evaluated" or
+  "unavailable" instead of hard-coded numbers.
 """
 
 import os
-import time
-import asyncio
-from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Request, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, Form
+from typing import List, Optional
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Import Service Layer Registry
 from services import (
-    CrawlerService,
-    SSLService,
-    WHOISService,
-    DNSService,
-    DOMService,
-    JavaScriptService,
-    ScreenshotService,
-    OCRService,
-    GraphService,
-    FeatureService,
     GNNService,
-    ViTService,
-    BERTService,
-    EnsembleService,
     LLMService,
     FusionService,
-    ExplainabilityService,
     DatasetService,
-    DashboardService
+    DashboardService,
 )
-from dataset_loader import BENCHMARK_DATASETS, get_experimental_benchmark_table, get_stratified_split
-from database import get_db, init_db, ScanResultDB, UserDB, AuditLogDB
-from security import get_current_user, create_access_token, hash_password, verify_password
-from mlops_service import MLOpsRegistryManager
+from component_status import NOT_EVALUATED, REASONS, unavailable
+from database import init_db
 
 app = FastAPI(
-    title="PhishGuard-X Central API Gateway",
-    description="Service-Oriented Microservice API Gateway routing requests through dedicated AI model services and intelligence pipelines.",
-    version="3.0.0"
+    title="PhishGuard API",
+    description="Phishing website analysis API. Components that are not yet genuinely implemented "
+                "report an explicit unavailable status.",
+    version="0.1.0-honesty-pass",
 )
 
 app.add_middleware(
@@ -66,47 +48,48 @@ DASHBOARD_DIR = os.path.join(os.path.dirname(__file__), "dashboard")
 if os.path.exists(DASHBOARD_DIR):
     app.mount("/static", StaticFiles(directory=DASHBOARD_DIR), name="static")
 
+
 @app.on_event("startup")
 def on_startup():
     init_db()
 
-# Request Models
+
+# Request models
 class ScanRequest(BaseModel):
     url: str
     html_content: Optional[str] = ""
 
+
 class BatchScanRequest(BaseModel):
     urls: List[str]
+
 
 class LoginRequest(BaseModel):
     username: str
     password: str
 
-class GNNPredictRequest(BaseModel):
-    url: str
-    html_content: Optional[str] = ""
-
-class ViTPredictRequest(BaseModel):
-    url: str
-    image_path: Optional[str] = ""
-
-class BERTPredictRequest(BaseModel):
-    url: str
-
-class SingleLLMRequest(BaseModel):
-    engine_id: Optional[str] = "gpt-5.5"
-    url: str
-    dom_snippet: Optional[str] = ""
 
 class CompareLLMRequest(BaseModel):
     engine_ids: List[str]
     url: str
     dom_snippet: Optional[str] = ""
 
-class ScreenshotAnalyzeRequest(BaseModel):
+
+class ImageRequest(BaseModel):
     url: Optional[str] = ""
     image_path: Optional[str] = ""
     base64_data: Optional[str] = ""
+
+
+def not_available(component: str) -> JSONResponse:
+    """HTTP 501 for endpoints whose component was simulated and is now disabled."""
+    return JSONResponse(status_code=501, content=unavailable(component))
+
+
+def require_url(url: str) -> str:
+    if not url or not url.strip():
+        raise HTTPException(status_code=400, detail="Target URL cannot be empty.")
+    return url.strip()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -115,273 +98,146 @@ async def serve_dashboard():
     if os.path.exists(index_path):
         with open(index_path, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
-    return HTMLResponse(content="<h1>PhishGuard-X API Gateway Active</h1><p>Visit <a href='/docs'>/docs</a> for Swagger UI.</p>")
+    return HTMLResponse(content="<h1>PhishGuard API</h1><p>See <a href='/docs'>/docs</a>.</p>")
 
 
-# --- Dedicated AI Model Endpoints (10 Core Detection Models) ---
+# --- Scan pipeline ---
+
+@app.post("/api/v1/scan")
+@app.post("/api/v1/detect")
+@app.post("/models/fusion/predict")
+async def scan_endpoint(req: ScanRequest):
+    """Runs the scan pipeline once. No verdict is returned until a trained fusion model exists."""
+    return await FusionService.predict(require_url(req.url), req.html_content or "")
+
+
+@app.post("/api/v1/batch-scan")
+async def batch_scan_endpoint(req: BatchScanRequest):
+    urls = [u.strip() for u in req.urls if u and u.strip()][:10]
+    if not urls:
+        raise HTTPException(status_code=400, detail="URL list cannot be empty.")
+    results = []
+    for url in urls:
+        report = await FusionService.predict(url, "")
+        results.append({
+            "url": url,
+            "verdict": report["verdict"],
+            "phishing_probability": report["phishing_probability"],
+            "decision": report["decision"],
+            "processing_latency_ms": report["processing_latency_ms"],
+        })
+    return {"total_scanned": len(results), "batch_results": results}
+
+
+# --- Individual components ---
 
 @app.post("/models/gnn/predict")
-async def gnn_model_endpoint(req: GNNPredictRequest):
-    """PyTorch Graph Attention Network (GNN/GAT) Dedicated Microservice Endpoint."""
-    return GNNService.predict(req.html_content or "", req.url)
+async def gnn_model_endpoint(req: ScanRequest):
+    """Returns DOM graph statistics; the GNN model output itself is unavailable."""
+    return GNNService.predict(req.html_content or "", require_url(req.url))
+
+
+@app.get("/models/llm/list")
+async def list_llm_models_endpoint():
+    engines = LLMService.list_engines()
+    return {"engines": engines, "listed_engines": len(engines),
+            "implemented_engines": sum(1 for e in engines if e["implemented"])}
+
+
+@app.post("/models/llm/predict")
+async def llm_model_endpoint(req: ScanRequest):
+    return await LLMService.predict(require_url(req.url), (req.html_content or "")[:1000])
+
+
+@app.post("/models/llm/compare")
+async def compare_llm_models_endpoint(req: CompareLLMRequest):
+    return await LLMService.compare_engines(req.engine_ids, require_url(req.url), (req.dom_snippet or "")[:1000])
+
+
+@app.post("/models/llm/{engine_id}/predict")
+async def single_llm_model_endpoint(engine_id: str, req: ScanRequest):
+    result = await LLMService.predict_engine(engine_id, require_url(req.url), (req.html_content or "")[:1000])
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Unknown LLM engine id: {engine_id}")
+    return result
+
+
+# Disabled (previously simulated) components -> HTTP 501 with an explicit reason.
 
 @app.post("/models/vit/predict")
-async def vit_model_endpoint(req: ViTPredictRequest):
-    """PyTorch Vision Transformer (ViT) & MDPI 2026 Visual Suite Dedicated Microservice Endpoint."""
-    return ViTService.predict(req.url, req.image_path or "")
-
 @app.post("/models/phishpedia/predict")
-async def phishpedia_endpoint(req: ViTPredictRequest):
-    """Phishpedia Faster R-CNN Object Detection & Siamese Brand Matching Microservice Endpoint (MDPI 2026)."""
-    return ViTService.predict_phishpedia(req.url)
-
 @app.post("/models/visualphishnet/predict")
-async def visualphishnet_endpoint(req: ViTPredictRequest):
-    """VisualPhishNet Triplet Loss CNN Layout Embedding Microservice Endpoint (MDPI 2026)."""
-    return ViTService.predict_visualphishnet(req.url)
-
 @app.post("/models/phash/predict")
-async def phash_endpoint(req: ViTPredictRequest):
-    """Perceptual Hashing (pHash + DCT + FAISS) Baseline Microservice Endpoint (MDPI 2026)."""
-    return ViTService.predict_phash(req.url)
-
 @app.post("/models/visual-hybrid/predict")
-async def visual_hybrid_endpoint(req: ViTPredictRequest):
-    """MDPI 2026 Hybrid Visual Detector (pHash Binary Filter + Phishpedia Brand Attribution)."""
-    return ViTService.predict_hybrid_visual(req.url)
+@app.post("/api/v1/screenshot/analyze")
+async def visual_model_endpoint(req: ImageRequest):
+    return not_available("visual")
+
+
+@app.post("/api/v1/screenshot/upload")
+async def upload_screenshot_endpoint(file: UploadFile = File(...), target_url: Optional[str] = Form(None)):
+    """Upload is not stored or analysed: no visual model exists."""
+    return not_available("visual")
+
+
+@app.post("/models/bert/predict")
+async def bert_model_endpoint(req: ScanRequest):
+    return not_available("bert")
+
+
+@app.post("/models/ensemble/predict")
+@app.post("/models/rf/predict")
+@app.post("/models/catboost/predict")
+async def classical_model_endpoint(req: ScanRequest):
+    return not_available("classical_ml")
+
+
+@app.post("/models/autoencoder/predict")
+async def autoencoder_endpoint(req: ScanRequest):
+    return not_available("anomaly")
+
+
+@app.post("/models/xai/predict")
+async def xai_model_endpoint(req: ScanRequest):
+    return not_available("explanation")
+
 
 @app.get("/api/v1/eer-optimize")
 @app.post("/api/v1/eer-optimize")
-async def eer_optimize_endpoint(dataset: str = "CERT Polska"):
-    """Two-Stage Coarse + Fine-Grained Threshold Search Algorithm for EER (FPR=FNR) Optimization."""
-    return ViTService.optimize_eer(dataset)
-
 @app.get("/api/v1/benchmark-comparison")
-async def benchmark_comparison_endpoint():
-    """Returns experimental benchmark table across CERT Polska, PP, VP, and LNU-Phish datasets."""
-    return {
-        "datasets": BENCHMARK_DATASETS,
-        "stratified_split": get_stratified_split(),
-        "benchmark_matrix": get_experimental_benchmark_table()
-    }
+async def benchmark_endpoint():
+    return not_available("benchmark")
+
 
 @app.get("/api/v1/screenshot-datasets")
-async def get_screenshot_datasets_endpoint():
-    """Returns metadata and status for connected screenshot datasets (LNU-Phish, Phish360, Hugging Face)."""
-    return DatasetService.get_screenshot_datasets()
-
 @app.post("/api/v1/screenshot-datasets/connect")
-async def connect_screenshot_dataset_endpoint(dataset_key: str = "all"):
-    """Connects to LNU-Phish, Phish360, or Hugging Face Phishing Webpage Screenshot datasets."""
-    return DatasetService.connect_screenshot_dataset(dataset_key)
+@app.get("/api/v1/datasets/fetch-external")
+@app.post("/api/v1/datasets/fetch-external")
+async def screenshot_datasets_endpoint():
+    return not_available("screenshot_datasets")
+
 
 @app.get("/api/v1/datasets/export")
 @app.post("/api/v1/datasets/export")
 async def export_dataset_endpoint():
-    """Compiles and exports the unified multimodal dataset package ready for external publishing."""
-    return DatasetService.export_publishing_package()
+    return not_available("dataset")
+
 
 @app.get("/api/v1/datasets/validate")
 async def validate_dataset_endpoint():
-    """Runs automated dataset integrity, non-null, and screenshot file existence checks."""
+    """Genuine file checks on the committed (synthetic) CSV."""
     return DatasetService.validate_dataset()
 
-@app.post("/api/v1/datasets/fetch-external")
-@app.get("/api/v1/datasets/fetch-external")
-async def fetch_external_datasets_endpoint():
-    """Connects to live official URLs (LNU-Phish, Phish360, Hugging Face) and fetches external dataset metadata & assets."""
-    return DatasetService.fetch_external_datasets()
 
-@app.post("/api/v1/screenshot/upload")
-async def upload_screenshot_endpoint(file: UploadFile = File(...), target_url: Optional[str] = Form(None)):
-    """
-    Accepts direct image file upload (PNG/JPG/WEBP) for visual AI phishing verification.
-    """
-    if not file or not file.filename:
-        raise HTTPException(status_code=400, detail="No screenshot image file uploaded.")
-    contents = await file.read()
-    return ScreenshotService.analyze_upload(
-        file_bytes=contents,
-        filename=file.filename,
-        target_url=target_url or ""
-    )
-
-@app.post("/api/v1/screenshot/analyze")
-async def analyze_screenshot_endpoint(req: ScreenshotAnalyzeRequest):
-    """
-    Analyzes a screenshot image path, base64 payload, or target webpage URL screenshot.
-    """
-    return ScreenshotService.analyze_upload(
-        target_url=req.url or "",
-        filename=req.image_path or "screenshot.png",
-        base64_data=req.base64_data or ""
-    )
-
-@app.post("/models/bert/predict")
-async def bert_model_endpoint(req: BERTPredictRequest):
-    """PyTorch BERT / RoBERTa Sequence Transformer Dedicated Microservice Endpoint."""
-    return BERTService.predict(req.url)
-
-@app.post("/models/ensemble/predict")
-async def ensemble_model_endpoint(req: ScanRequest):
-    """Classical Tree Ensemble & Autoencoder Dedicated Microservice Endpoint."""
-    features = FeatureService.extract_feature_vector(req.url, req.html_content or "")
-    svc = EnsembleService()
-    return svc.predict(features["combined_vector"], req.url)
-
-@app.post("/models/rf/predict")
-async def random_forest_endpoint(req: ScanRequest):
-    """Dedicated Random Forest Classifier Microservice Endpoint."""
-    features = FeatureService.extract_feature_vector(req.url, req.html_content or "")
-    svc = EnsembleService()
-    return svc.predict_rf(features["combined_vector"], req.url)
-
-@app.post("/models/catboost/predict")
-async def catboost_endpoint(req: ScanRequest):
-    """Dedicated CatBoost Gradient Boosting Microservice Endpoint."""
-    features = FeatureService.extract_feature_vector(req.url, req.html_content or "")
-    svc = EnsembleService()
-    return svc.predict_catboost(features["combined_vector"], req.url)
-
-@app.post("/models/autoencoder/predict")
-async def autoencoder_endpoint(req: ScanRequest):
-    """Dedicated Deep Autoencoder Anomaly Detector Microservice Endpoint."""
-    features = FeatureService.extract_feature_vector(req.url, req.html_content or "")
-    svc = EnsembleService()
-    return svc.predict_autoencoder(features["combined_vector"], req.url)
-
-@app.get("/models/llm/list")
-async def list_llm_models_endpoint():
-    """List metadata, developer info, and status of all 10 registered LLM engines."""
-    return {"total_engines": 10, "engines": LLMService.list_engines()}
-
-@app.post("/models/llm/predict")
-async def llm_model_endpoint(req: ScanRequest):
-    """10-LLM Bayesian Consensus Orchestrator Dedicated Microservice Endpoint."""
-    features = FeatureService.extract_feature_vector(req.url, req.html_content or "")
-    gnn_res = GNNService.predict(req.html_content or "", req.url)
-    return await LLMService.predict(req.url, (req.html_content or "")[:1000], features["combined_vector"], gnn_res)
-
-@app.post("/models/llm/{engine_id}/predict")
-async def single_llm_model_endpoint(engine_id: str, req: ScanRequest):
-    """Query an individual LLM engine directly by ID (e.g. gpt-5.5, claude-4-opus, deepseek-v3)."""
-    features = FeatureService.extract_feature_vector(req.url, req.html_content or "")
-    gnn_res = GNNService.predict(req.html_content or "", req.url)
-    return await LLMService.predict_engine(engine_id, req.url, (req.html_content or "")[:1000], features["combined_vector"], gnn_res)
-
-@app.post("/models/llm/compare")
-async def compare_llm_models_endpoint(req: CompareLLMRequest):
-    """Run side-by-side comparison across selected LLM engines."""
-    features = FeatureService.extract_feature_vector(req.url, req.dom_snippet or "")
-    gnn_res = GNNService.predict(req.dom_snippet or "", req.url)
-    return await LLMService.compare_engines(req.engine_ids, req.url, (req.dom_snippet or "")[:1000], features["combined_vector"], gnn_res)
-
-@app.post("/models/fusion/predict")
-async def fusion_model_endpoint(req: ScanRequest):
-    """Multimodal Fusion Network Dedicated Microservice Endpoint."""
-    return await FusionService.predict(req.url, req.html_content or "")
-
-@app.post("/models/xai/predict")
-async def xai_model_endpoint(req: ScanRequest):
-    """Dedicated Explainable AI (XAI) Matrix Endpoint."""
-    fusion_report = await FusionService.predict(req.url, req.html_content or "")
-    return ExplainabilityService.generate_xai_report(fusion_report)
-
-@app.post("/api/v1/batch-scan")
-async def batch_scan_endpoint(req: BatchScanRequest):
-    """Parallel batch evaluation for multiple URLs across all 10 detection models."""
-    if not req.urls:
-        raise HTTPException(status_code=400, detail="URL list cannot be empty.")
-    
-    results = []
-    for u in req.urls[:10]:
-        clean_url = u.strip()
-        if clean_url:
-            rep = await FusionService.predict(clean_url, "")
-            results.append({
-                "url": clean_url,
-                "verdict": rep.get("verdict", "UNKNOWN"),
-                "threat_score": rep.get("overall_threat_score", 0.0),
-                "risk_level": rep.get("risk_level", "LOW")
-            })
-    
-    return {
-        "total_scanned": len(results),
-        "batch_results": results
-    }
-
-
-
-# --- Central API Gateway Workflow Pipeline Endpoint ---
-
-@app.post("/api/v1/scan")
-@app.post("/api/v1/detect")
-async def central_scan_pipeline(req: ScanRequest):
-    """
-    Sequential 32-step microservice pipeline orchestrated through the Service Layer.
-    """
-    if not req.url or len(req.url.strip()) == 0:
-        raise HTTPException(status_code=400, detail="Target URL cannot be empty.")
-
-    url = req.url.strip()
-    start_time = time.time()
-
-    # Step 1: Crawler Service
-    crawl_data = CrawlerService.crawl(url, req.html_content or "")
-    
-    # Step 2: Intelligence Services
-    ssl_res = SSLService.analyze(url)
-    whois_res = WHOISService.analyze(url)
-    dns_res = DNSService.analyze(url)
-    
-    # Step 3: DOM, JS & Graph Services
-    dom_res = DOMService.parse(crawl_data["html_content"], url)
-    js_res = JavaScriptService.parse("", crawl_data["html_content"])
-    graph_res = GraphService.generate_graph(crawl_data["html_content"], url)
-    
-    # Step 4: Vision & OCR Services
-    screenshot_res = ScreenshotService.capture(url)
-    ocr_res = OCRService.extract_text(url)
-    
-    # Step 5: Feature Service
-    feature_vector = FeatureService.extract_feature_vector(url, crawl_data["html_content"])
-    
-    # Step 6: Dedicated Model Services
-    gnn_out = GNNService.predict(crawl_data["html_content"], url)
-    vit_out = ViTService.predict(url)
-    bert_out = BERTService.predict(url)
-    ensemble_svc = EnsembleService()
-    ensemble_out = ensemble_svc.predict(feature_vector["combined_vector"], url)
-    llm_out = await LLMService.predict(url, crawl_data["html_content"][:1000], feature_vector["combined_vector"], gnn_out)
-    
-    # Step 7: Fusion Service & Explainability Service
-    fusion_report = await FusionService.predict(url, crawl_data["html_content"])
-    xai_report = ExplainabilityService.generate_xai_report(fusion_report)
-    
-    elapsed_ms = int((time.time() - start_time) * 1000)
-    fusion_report["processing_latency_ms"] = elapsed_ms
-    fusion_report["xai_evidence_matrix"] = xai_report
-    
-    return JSONResponse(status_code=200, content=fusion_report)
-
-
-# --- Dashboard API Gateway Endpoints ---
+# --- Status endpoints ---
 
 @app.get("/dashboard/system")
 @app.get("/api/v1/dashboard")
-async def get_dashboard_system():
-    return DashboardService.get_telemetry()
-
 @app.get("/dashboard/models")
 @app.get("/api/v1/model_info")
-async def get_dashboard_models():
-    return {
-        "platform": "PhishGuard-X Service Architecture",
-        "gnn": GNNService.predict("", "http://test.com"),
-        "vit": ViTService.predict("http://test.com"),
-        "bert": BERTService.predict("http://test.com"),
-        "ensemble": EnsembleService().predict({}, "http://test.com")
-    }
+async def get_component_status():
+    return DashboardService.get_telemetry()
+
 
 @app.get("/dashboard/datasets")
 @app.get("/api/v1/dataset_stats")
@@ -389,38 +245,24 @@ async def get_dashboard_models():
 async def get_dashboard_datasets():
     return DatasetService.get_dataset_statistics()
 
+
 @app.get("/dashboard/history")
 @app.get("/api/v1/history")
 async def get_dashboard_history():
-    return {
-        "total_scans": 120,
-        "recent_history": [
-            {"target_url": "http://paypal-security-verification-center.com/login", "verdict": "PHISHING DETECTED", "threat_score": 97.5, "latency_ms": 14},
-            {"target_url": "https://github.com/torvalds/linux", "verdict": "LEGITIMATE SITE", "threat_score": 0.1, "latency_ms": 12}
-        ]
-    }
+    return unavailable("scan_history")
+
 
 @app.get("/api/v1/metrics")
 async def get_metrics():
-    return {
-        "test_accuracy": "100.00%",
-        "test_precision": "100.00%",
-        "test_recall": "100.00%",
-        "test_f1_score": "100.00%",
-        "roc_auc": "1.000",
-        "latency_ms": 14
-    }
+    return {"status": NOT_EVALUATED, "reason": REASONS["evaluation"], "metrics": None}
+
 
 @app.get("/api/v1/health")
 async def health_check():
-    return {"status": "OPERATIONAL", "architecture": "Service-Oriented Architecture (SOA)"}
+    """Reports only that the API process is running."""
+    return {"status": "ok"}
 
-
-# --- User Auth Endpoints ---
 
 @app.post("/api/v1/auth/login")
 async def login_user(req: LoginRequest):
-    if req.username == "admin" and req.password in ["admin123", "admin"]:
-        token = create_access_token({"sub": "admin", "role": "admin"})
-        return {"access_token": token, "token_type": "bearer"}
-    return {"access_token": create_access_token({"sub": req.username, "role": "analyst"}), "token_type": "bearer"}
+    return not_available("auth")
