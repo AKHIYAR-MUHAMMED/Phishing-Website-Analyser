@@ -1,1008 +1,198 @@
 /**
- * PhishGuard-X: Production-Grade Multimodal Cyber Guard UI Controller.
- * Handles 9-modality scanning, 10-LLM Bayesian consensus matrix rendering,
- * XAI evidence tables, WHOIS/SSL inspectors, and DOM Graph visualizers.
+ * PhishGuard AI dashboard controller.
+ *
+ * Honesty rules (Phase 1):
+ * - Every value shown comes from an API response. No default or placeholder numbers.
+ * - No client-side verdicts. If the backend fails, the error is shown.
+ * - Components that are not available are shown with their status and reason.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
-    initPresets();
     initScanForm();
-    initBatchScanner();
-    initLLMToolbarAndModal();
-    initScreenshotSystem();
-    initDatasetFetchButton();
-    loadDatasetStats();
-    
-    // Initial scan on load
-    const initialUrl = document.getElementById('target-url-input').value;
-    if (initialUrl) {
-        performScan(initialUrl);
-    }
+    loadComponentStatus();
+    loadEvaluationStatus();
 });
 
+const STATUS_BADGE = {
+    available: 'badge-success',
+    ok: 'badge-success',
+    heuristic: 'badge-warning',
+    not_evaluated: 'badge-muted',
+    unavailable: 'badge-muted',
+    not_implemented: 'badge-muted',
+    error: 'badge-danger',
+};
 
-// --- Tab Navigation ---
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function statusBadge(status) {
+    const cls = STATUS_BADGE[status] || 'badge-muted';
+    return `<span class="badge ${cls}">${escapeHtml(status || 'unknown')}</span>`;
+}
+
+function rowsHtml(obj) {
+    return Object.entries(obj)
+        .map(([k, v]) => `<div class="intel-row"><span>${escapeHtml(k)}</span> <strong>${escapeHtml(v === null ? '—' : v)}</strong></div>`)
+        .join('');
+}
+
+function unavailableHtml(section) {
+    return `${statusBadge(section.status)} <p class="status-note">${escapeHtml(section.reason || '')}</p>`;
+}
+
+async function fetchJson(url, options) {
+    const response = await fetch(url, options);
+    let body = null;
+    try { body = await response.json(); } catch (e) { /* non-JSON body */ }
+    if (!response.ok) {
+        const detail = body && (body.detail || body.reason) ? (body.detail || body.reason) : '';
+        throw new Error(`HTTP ${response.status}${detail ? ': ' + detail : ''}`);
+    }
+    return body;
+}
+
+// --- Tab navigation ---
 function initNavigation() {
-    const navItems = document.querySelectorAll('.nav-item');
-    const tabPages = document.querySelectorAll('.tab-page');
-    const pageHeading = document.getElementById('page-heading');
-
-    const headings = {
-        'scanner-tab': 'PhishGuard-X Multimodal Scanner',
-        'llm-tab': '10-LLM Bayesian Consensus Matrix',
-        'vision-tab': 'PyTorch Vision Transformer (ViT) Inspector',
-        'screenshot-tab': 'Screenshot Verification System & Visual AI Inspector',
-        'graph-tab': 'DOM Structural Graph Neural Network',
-        'whois-tab': 'WHOIS, DNS & SSL Intelligence',
-        'dataset-tab': '4-Kaggle Merged Dataset & Benchmarks'
-    };
-
-    navItems.forEach(item => {
+    const headings = { 'scanner-tab': 'Scanner', 'status-tab': 'Component Status', 'evaluation-tab': 'Evaluation & Data' };
+    document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
-            const targetTab = item.getAttribute('data-tab');
-
-            navItems.forEach(nav => nav.classList.remove('active'));
-            tabPages.forEach(page => page.classList.remove('active'));
-
+            const target = item.getAttribute('data-tab');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
             item.classList.add('active');
-            const targetEl = document.getElementById(targetTab);
-            if (targetEl) targetEl.classList.add('active');
-
-            if (pageHeading && headings[targetTab]) {
-                pageHeading.textContent = headings[targetTab];
-            }
+            const page = document.getElementById(target);
+            if (page) page.classList.add('active');
+            document.getElementById('page-heading').textContent = headings[target] || '';
         });
     });
 }
 
-// --- Quick Presets ---
-function initPresets() {
-    const presetBtns = document.querySelectorAll('.btn-preset[data-url]');
-    const urlInput = document.getElementById('target-url-input');
-
-    presetBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const url = btn.getAttribute('data-url');
-            if (url && urlInput) {
-                urlInput.value = url;
-                performScan(url);
-            }
-        });
-    });
-}
-
-
-// --- Form Handler ---
+// --- Scan ---
 function initScanForm() {
-    const scanBtn = document.getElementById('start-scan-btn');
+    const btn = document.getElementById('start-scan-btn');
     const urlInput = document.getElementById('target-url-input');
-
-    if (scanBtn && urlInput) {
-        scanBtn.addEventListener('click', () => {
-            const url = urlInput.value.trim();
-            if (url) performScan(url);
-        });
-
-        urlInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                const url = urlInput.value.trim();
-                if (url) performScan(url);
-            }
-        });
-    }
+    const run = () => { const url = urlInput.value.trim(); if (url) performScan(url); };
+    btn.addEventListener('click', run);
+    urlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') run(); });
 }
 
-// --- API Scan Engine ---
-async function performScan(targetUrl) {
-    const scanBtn = document.getElementById('start-scan-btn');
-    const resultsContainer = document.getElementById('results-container');
-    
-    if (scanBtn) {
-        scanBtn.disabled = true;
-        scanBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analyzing 9 Modalities...';
-    }
+async function performScan(url) {
+    const btn = document.getElementById('start-scan-btn');
+    const results = document.getElementById('results-container');
+    const errorBox = document.getElementById('scan-error');
+    const html = document.getElementById('html-content-input').value;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analysing...';
+    errorBox.classList.add('hidden');
+    results.classList.add('hidden');
 
     try {
-        const response = await fetch('/api/v1/detect', {
+        const report = await fetchJson('/api/v1/scan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: targetUrl, html_content: '' })
+            body: JSON.stringify({ url: url, html_content: html }),
         });
-
-        if (!response.ok) {
-            throw new Error(`Server returned status ${response.status}`);
-        }
-
-        const data = await response.json();
-        renderResults(data);
-        if (resultsContainer) resultsContainer.classList.remove('hidden');
+        renderReport(report);
+        results.classList.remove('hidden');
     } catch (err) {
-        console.warn('Backend API note, executing local client evaluator:', err);
-        renderFallbackResults(targetUrl);
-        if (resultsContainer) resultsContainer.classList.remove('hidden');
+        // No fallback verdict: show the failure.
+        document.getElementById('scan-error-text').textContent = `The backend request failed (${err.message}). No result is shown.`;
+        errorBox.classList.remove('hidden');
     } finally {
-        if (scanBtn) {
-            scanBtn.disabled = false;
-            scanBtn.innerHTML = '<i class="fa-solid fa-shield-virus"></i> Analyze 9 Modalities';
-        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Analyse';
     }
 }
 
-// --- Render Detection Results ---
-function renderResults(data) {
-    const report = data.report || data;
-    const verdictText = report.verdict || report.final_verdict || 'PHISHING DETECTED';
-    const isPhishing = verdictText.includes('PHISHING');
-    
-    // Elements
-    const verdictTag = document.getElementById('verdict-tag');
-    const riskBadge = document.getElementById('risk-badge');
-    const categoryBadge = document.getElementById('category-badge');
-    const verdictCard = document.getElementById('verdict-card');
-    const latencyVal = document.getElementById('latency-val');
-    const confidenceVal = document.getElementById('confidence-val');
-    const meterScore = document.getElementById('meter-score');
-    const actionText = document.getElementById('action-text');
-    
-    if (verdictTag) {
-        verdictTag.textContent = isPhishing ? 'PHISHING DETECTED' : 'LEGITIMATE SITE (SAFE)';
-        verdictTag.className = `verdict-tag ${isPhishing ? 'tag-danger' : 'tag-success'}`;
-    }
-    
-    if (riskBadge) {
-        riskBadge.textContent = report.risk_level || (isPhishing ? 'CRITICAL RISK' : 'SAFE');
-        riskBadge.className = `risk-badge ${isPhishing ? 'risk-critical' : 'risk-low'}`;
-    }
+function renderReport(report) {
+    document.getElementById('verdict-val').textContent = report.verdict === null ? 'Not available' : report.verdict;
+    document.getElementById('probability-val').textContent =
+        report.phishing_probability === null ? 'Not available' : report.phishing_probability;
+    document.getElementById('latency-val').textContent = `${report.processing_latency_ms} ms`;
+    document.getElementById('decision-reason').textContent = report.decision ? report.decision.reason || '' : '';
 
-    if (categoryBadge) {
-        categoryBadge.textContent = report.attack_category || (isPhishing ? 'BRAND IMPERSONATION' : 'NONE');
-    }
-
-    if (verdictCard) {
-        verdictCard.className = `verdict-card ${isPhishing ? 'card-phishing' : 'card-legitimate'}`;
-    }
-
-    if (actionText) {
-        actionText.textContent = report.recommended_actions || (isPhishing ? "BLOCK IMMEDIATELY: Quarantine URL in gateway firewall and revoke session tokens." : "ALLOW: Domain verified as safe web infrastructure.");
-    }
-
-    const latency = report.processing_latency_ms || report.scan_latency_ms || 14;
-    if (latencyVal) latencyVal.textContent = `${latency} ms`;
-
-    let conf = report.confidence_score || report.confidence || 99.8;
-    if (conf <= 1.0) conf = conf * 100.0;
-    if (confidenceVal) confidenceVal.textContent = `${conf.toFixed(1)}%`;
-    
-    const rawScore = report.overall_threat_score !== undefined ? report.overall_threat_score : (report.threat_score || (isPhishing ? 99.1 : 0.1));
-    const scorePct = parseFloat(rawScore).toFixed(1);
-    if (meterScore) meterScore.textContent = `${scorePct}%`;
-    
-    const meterCircle = document.getElementById('meter-circle');
-    if (meterCircle) {
-        const color = isPhishing ? '#ef4444' : '#10b981';
-        meterCircle.style.background = `conic-gradient(${color} ${scorePct}%, rgba(255,255,255,0.08) 0)`;
-    }
-
-    // Modality Bars
-    const modScores = report.modality_scores || {};
-    updateBar('score-llm', 'bar-llm', modScores.llm_10_bayesian_consensus !== undefined ? modScores.llm_10_bayesian_consensus : (isPhishing ? 99.1 : 0.1));
-    updateBar('score-gnn', 'bar-gnn', modScores.gnn_graph_structure !== undefined ? modScores.gnn_graph_structure : (isPhishing ? 95.0 : 0.1));
-    updateBar('score-vit', 'bar-vit', modScores.vision_transformer_vit !== undefined ? modScores.vision_transformer_vit : (isPhishing ? 94.5 : 0.1));
-    updateBar('score-ml', 'bar-ml', modScores.classical_ml_ensemble !== undefined ? modScores.classical_ml_ensemble : (isPhishing ? 98.2 : 0.1));
-    updateBar('score-bert', 'bar-bert', modScores.bert_nlp_transformer !== undefined ? modScores.bert_nlp_transformer : (isPhishing ? 96.8 : 0.1));
-
-    // Render XAI Evidence Matrix Table
-    renderXAIMatrix(report.xai_evidence_matrix || []);
-
-    // Active Threat Vectors
-    const vectors = report.active_threat_vectors || report.threat_vector_matrix || [];
-    renderThreatVectors(vectors);
-
-    // 10-LLM Engine Breakdown
-    const engines = report.llm_consensus_breakdown || (report.llm_consensus_summary ? report.llm_consensus_summary.engine_details : []);
-    renderLLMEngines(engines, isPhishing);
-
-    // Vision Transformer & WHOIS/SSL Panels
-    renderVisionPanel(report.vision_analysis || {}, isPhishing);
-    renderWhoisSSLPanel(report.whois_dns_analysis || {}, report.ssl_analysis || {}, isPhishing);
-
-    // GNN Graph Canvas
-    const gnnStats = report.gnn_structural_analysis || report.gnn_graph_summary || {};
-    renderGNNStats(gnnStats, isPhishing);
-}
-
-function updateBar(labelId, barId, val) {
-    const num = parseFloat(val).toFixed(1);
-    const label = document.getElementById(labelId);
-    const bar = document.getElementById(barId);
-    if (label) label.textContent = `${num}%`;
-    if (bar) bar.style.width = `${num}%`;
-}
-
-// --- Render XAI Table ---
-function renderXAIMatrix(matrix) {
-    const tbody = document.getElementById('xai-tbody');
-    if (!tbody) return;
-
-    if (!matrix || matrix.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="3" class="text-muted">Analyzing multimodal features...</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = matrix.map(row => `
+    const m = report.modalities || {};
+    document.getElementById('modalities-tbody').innerHTML = Object.entries(m).map(([name, section]) => `
         <tr>
-            <td><strong>${row.modality}</strong></td>
-            <td><span class="badge ${parseFloat(row.score) > 50 ? 'badge-danger' : 'badge-success'}">${row.score}</span></td>
-            <td>${row.finding}</td>
-        </tr>
-    `).join('');
-}
+            <td><strong>${escapeHtml(name)}</strong></td>
+            <td>${statusBadge(section.status)}</td>
+            <td>${escapeHtml(section.reason || section.note || section.kind ||
+                (section.engines_queried !== undefined ? `${section.engines_ok} of ${section.engines_queried} engines returned a valid answer` : ''))}</td>
+        </tr>`).join('');
 
-// --- Render Threat Vectors ---
-function renderThreatVectors(vectors) {
-    const container = document.getElementById('threat-vectors-list');
-    if (!container) return;
+    const url = m.url_features || {};
+    document.getElementById('url-features-box').innerHTML =
+        url.status === 'available' ? rowsHtml(url.features) : unavailableHtml(url);
 
-    if (!vectors || vectors.length === 0) {
-        container.innerHTML = `<div class="threat-item clean"><i class="fa-solid fa-circle-check"></i> Clean Domain</div>`;
-        return;
+    const dom = m.dom_graph || {};
+    if (dom.status === 'available') {
+        const { status, kind, known_limitations, ...stats } = dom;
+        document.getElementById('dom-graph-box').innerHTML =
+            rowsHtml(stats) + `<p class="status-note mt-2">${escapeHtml(known_limitations || '')}</p>`;
+    } else {
+        document.getElementById('dom-graph-box').innerHTML = unavailableHtml(dom);
     }
 
-    container.innerHTML = vectors.map(vec => {
-        const desc = typeof vec === 'string' ? vec : vec.description;
-        const sev = typeof vec === 'object' ? (vec.severity || 'HIGH') : 'HIGH';
-        const isClean = desc.includes('No active') || desc.includes('Clean');
+    const js = m.js_indicators || {};
+    document.getElementById('js-box').innerHTML = js.status === 'heuristic'
+        ? `${statusBadge(js.status)} <p class="status-note">${escapeHtml(js.note)}</p>${rowsHtml(js.counts)}`
+        : unavailableHtml(js);
 
-        return `
-            <div class="threat-item ${isClean ? 'clean' : 'danger'}">
-                <i class="fa-solid ${isClean ? 'fa-circle-check' : 'fa-triangle-exclamation'}"></i>
-                <div class="threat-content">
-                    <span class="threat-title">${typeof vec === 'object' ? (vec.type || 'THREAT VECTOR') : 'ACTIVE VECTOR'}</span>
-                    <p class="threat-desc">${desc}</p>
-                </div>
-                <span class="sev-badge ${isClean ? 'sev-none' : 'sev-high'}">${sev}</span>
-            </div>
-        `;
+    renderLLM(m.llm || {});
+}
+
+function renderLLM(llm) {
+    const results = llm.engine_results || [];
+    const header = `<p class="status-note">${escapeHtml(llm.engines_ok)} of ${escapeHtml(llm.engines_queried)} engines returned a valid answer.
+        ${llm.aggregate ? escapeHtml(llm.aggregate.reason) : ''}</p>`;
+    const rows = results.map(r => {
+        const detail = r.status === 'ok'
+            ? `${escapeHtml(r.verdict)} (threat_score ${escapeHtml(r.threat_score)}, ${escapeHtml(r.latency_ms)} ms). Model-generated reasoning: ${escapeHtml(r.reasoning)}`
+            : escapeHtml(r.reason || '');
+        return `<tr><td>${escapeHtml(r.engine)}</td><td>${statusBadge(r.status)}</td><td>${detail}</td></tr>`;
     }).join('');
+    document.getElementById('llm-box').innerHTML = header +
+        `<div class="table-wrapper"><table class="data-table"><thead><tr><th>Engine</th><th>Status</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-// --- Render Vision Panel ---
-function renderVisionPanel(vit, isPhish) {
-    const logoEl = document.getElementById('vit-logo-text');
-    const layoutEl = document.getElementById('vit-layout-text');
-    const ocrBox = document.getElementById('ocr-tokens-box');
-
-    if (logoEl) logoEl.textContent = vit.detected_logo || (isPhish ? 'PayPal / Microsoft Spoofed Logo (98.2% Match)' : 'Verified Official Brand Signature');
-    if (layoutEl) layoutEl.textContent = vit.form_layout_verdict || (isPhish ? 'CRITICAL: High-fidelity login form clone detected' : 'Authentic standard layout hierarchy');
-
-    if (ocrBox) {
-        const tokens = vit.ocr_extracted_text || (isPhish ? ['Sign in to Account', 'Verification Required', 'Enter Password'] : ['Search', 'About Us', 'Sign In']);
-        ocrBox.innerHTML = tokens.map(t => `<span class="ocr-chip">${t}</span>`).join('');
-    }
-}
-
-// --- Render WHOIS/SSL Panel ---
-function renderWhoisSSLPanel(whois, ssl, isPhish) {
-    const reg = document.getElementById('whois-registrar');
-    const age = document.getElementById('whois-age');
-    const exp = document.getElementById('whois-expiry');
-    const priv = document.getElementById('whois-privacy');
-
-    const ca = document.getElementById('ssl-ca');
-    const tls = document.getElementById('ssl-tls');
-    const sig = document.getElementById('ssl-sig');
-    const valid = document.getElementById('ssl-valid');
-
-    if (reg) reg.textContent = whois.registrar || (isPhish ? 'CheapDomains LLC' : 'MarkMonitor Inc.');
-    if (age) age.textContent = `${whois.registration_age_days || (isPhish ? 14 : 7300)} Days`;
-    if (exp) exp.textContent = `${whois.days_to_expiry || (isPhish ? 30 : 365)} Days`;
-    if (priv) priv.textContent = whois.privacy_protected ? 'Active (Hidden Registrant)' : 'Public';
-
-    if (ca) ca.textContent = ssl.ca_issuer || (isPhish ? "Untrusted / Let's Encrypt Free Tier" : "DigiCert Global Root CA");
-    if (tls) tls.textContent = ssl.tls_version || (isPhish ? 'TLSv1.0 (Deprecated)' : 'TLSv1.3');
-    if (sig) sig.textContent = ssl.signature_algorithm || (isPhish ? 'sha1WithRSAEncryption (Weak)' : 'ecdsa-with-SHA384');
-    if (valid) {
-        valid.textContent = ssl.certificate_valid ? 'Valid SSL' : 'Invalid / Expired SSL';
-        valid.className = ssl.certificate_valid ? 'text-success' : 'text-danger';
-    }
-}
-
-// --- Batch Scanner Handler ---
-function initBatchScanner() {
-    const toggleBtn = document.getElementById('toggle-batch-btn');
-    const batchContainer = document.getElementById('batch-scan-container');
-    const runBatchBtn = document.getElementById('run-batch-scan-btn');
-    const textarea = document.getElementById('batch-urls-input');
-    const wrapper = document.getElementById('batch-results-table-wrapper');
-    const tbody = document.getElementById('batch-tbody');
-
-    if (toggleBtn && batchContainer) {
-        toggleBtn.addEventListener('click', () => {
-            batchContainer.classList.toggle('hidden');
-        });
-    }
-
-    if (runBatchBtn && textarea) {
-        runBatchBtn.addEventListener('click', async () => {
-            const lines = textarea.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-            if (lines.length === 0) {
-                alert('Please enter at least one URL to batch scan.');
-                return;
-            }
-
-            runBatchBtn.disabled = true;
-            runBatchBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Executing Batch Scan...';
-
-            try {
-                const response = await fetch('/api/v1/batch-scan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ urls: lines })
-                });
-
-                const data = await response.json();
-                if (tbody && data.batch_results) {
-                    tbody.innerHTML = data.batch_results.map(r => `
-                        <tr>
-                            <td><strong>${r.url}</strong></td>
-                            <td><span class="badge ${r.verdict.includes('PHISHING') ? 'badge-danger' : 'badge-success'}">${r.verdict}</span></td>
-                            <td><strong>${r.threat_score}%</strong></td>
-                            <td><span class="sev-badge ${r.verdict.includes('PHISHING') ? 'sev-high' : 'sev-none'}">${r.risk_level}</span></td>
-                        </tr>
-                    `).join('');
-                    if (wrapper) wrapper.classList.remove('hidden');
-                }
-            } catch (err) {
-                alert('Batch scan error: ' + err.message);
-            } finally {
-                runBatchBtn.disabled = false;
-                runBatchBtn.innerHTML = '<i class="fa-solid fa-bolt"></i> Execute Parallel Batch Scan';
-            }
-        });
-    }
-}
-
-// --- LLM Toolbar & Modal Inspector ---
-function initLLMToolbarAndModal() {
-    const closeBtn = document.getElementById('modal-close-btn');
-    const modal = document.getElementById('model-modal');
-    const selectAllBtn = document.getElementById('select-all-llm-btn');
-    const deselectAllBtn = document.getElementById('deselect-all-llm-btn');
-    const compareBtn = document.getElementById('run-comparison-btn');
-
-    if (closeBtn) closeBtn.addEventListener('click', closeModal);
-    if (modal) {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) closeModal();
-        });
-    }
-
-    if (selectAllBtn) {
-        selectAllBtn.addEventListener('click', () => {
-            document.querySelectorAll('.llm-card-select').forEach(cb => cb.checked = true);
-        });
-    }
-
-    if (deselectAllBtn) {
-        deselectAllBtn.addEventListener('click', () => {
-            document.querySelectorAll('.llm-card-select').forEach(cb => cb.checked = false);
-        });
-    }
-
-    if (compareBtn) {
-        compareBtn.addEventListener('click', runLLMComparison);
-    }
-}
-
-function showModal(titleText, contentHtml) {
-    const modal = document.getElementById('model-modal');
-    const title = document.getElementById('modal-title');
-    const body = document.getElementById('modal-body');
-
-    if (title) title.innerHTML = titleText;
-    if (body) body.innerHTML = contentHtml;
-    if (modal) modal.classList.remove('hidden');
-}
-
-function closeModal() {
-    const modal = document.getElementById('model-modal');
-    if (modal) modal.classList.add('hidden');
-}
-
-async function inspectSingleLLM(engineId, engineName) {
-    const urlInput = document.getElementById('target-url-input');
-    const targetUrl = urlInput ? urlInput.value.trim() : 'http://paypal-security-verification-center.com/signin?account_login=update';
-
-    showModal(`<i class="fa-solid fa-microchip"></i> Live Querying ${engineName}...`, `<p><i class="fa-solid fa-spinner fa-spin"></i> Executing dedicated microservice POST /models/llm/${engineId}/predict...</p>`);
-
+// --- Component status ---
+async function loadComponentStatus() {
+    const tbody = document.getElementById('components-tbody');
     try {
-        const response = await fetch(`/models/llm/${engineId}/predict`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: targetUrl, html_content: '' })
-        });
-
-        const data = await response.json();
-        const formatted = JSON.stringify(data, null, 2);
-        showModal(
-            `<i class="fa-solid fa-brain"></i> ${engineName} (${engineId}) - Execution Result`,
-            `
-                <div class="mb-3">
-                    <strong>Target URL:</strong> <code>${targetUrl}</code><br>
-                    <strong>Verdict:</strong> <span class="badge ${data.verdict === 'PHISHING' ? 'badge-danger' : 'badge-success'}">${data.verdict}</span> |
-                    <strong>Threat Score:</strong> ${data.threat_score}% |
-                    <strong>Latency:</strong> ${data.latency_ms}ms
-                </div>
-                <h4>Raw Model API Payload Output:</h4>
-                <pre class="json-code-block">${formatted}</pre>
-            `
-        );
+        const data = await fetchJson('/dashboard/system');
+        tbody.innerHTML = data.components.map(c => `
+            <tr><td><strong>${escapeHtml(c.name)}</strong></td><td>${statusBadge(c.status)}</td><td>${escapeHtml(c.reason)}</td></tr>`).join('');
     } catch (err) {
-        showModal(`<i class="fa-solid fa-triangle-exclamation"></i> Query Error`, `<p class="text-danger">Failed to fetch model prediction: ${err.message}</p>`);
+        tbody.innerHTML = `<tr><td colspan="3">Could not load component status (${escapeHtml(err.message)}).</td></tr>`;
     }
 }
 
-async function runLLMComparison() {
-    const checkboxes = document.querySelectorAll('.llm-card-select:checked');
-    const selectedIds = Array.from(checkboxes).map(cb => cb.getAttribute('data-engine-id'));
-
-    if (selectedIds.length === 0) {
-        alert('Please select at least 2 LLM models to compare.');
-        return;
-    }
-
-    const urlInput = document.getElementById('target-url-input');
-    const targetUrl = urlInput ? urlInput.value.trim() : 'http://paypal-security-verification-center.com/signin?account_login=update';
-
-    showModal(`<i class="fa-solid fa-code-compare"></i> Comparing ${selectedIds.length} LLM Models...`, `<p><i class="fa-solid fa-spinner fa-spin"></i> Running parallel benchmark POST /models/llm/compare...</p>`);
-
-    try {
-        const response = await fetch('/models/llm/compare', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ engine_ids: selectedIds, url: targetUrl, dom_snippet: '' })
-        });
-
-        const data = await response.json();
-        const formatted = JSON.stringify(data, null, 2);
-        showModal(
-            `<i class="fa-solid fa-code-compare"></i> Multi-Model Comparison Benchmark (${data.compared_engines_count} Models)`,
-            `
-                <div class="mb-3">
-                    <strong>Target URL:</strong> <code>${data.target_url}</code><br>
-                    <strong>Consensus Verdict:</strong> <span class="badge ${data.comparison_verdict === 'PHISHING' ? 'badge-danger' : 'badge-success'}">${data.comparison_verdict}</span> |
-                    <strong>Phishing Votes:</strong> ${data.phishing_votes} / ${data.compared_engines_count} |
-                    <strong>Average Threat Score:</strong> ${data.average_threat_score}%
-                </div>
-                <h4>Comparison Breakdown:</h4>
-                <pre class="json-code-block">${formatted}</pre>
-            `
-        );
-    } catch (err) {
-        showModal(`<i class="fa-solid fa-triangle-exclamation"></i> Comparison Error`, `<p class="text-danger">Failed to run model comparison: ${err.message}</p>`);
-    }
-}
-
-// --- Render 10-LLM Cards ---
-function renderLLMEngines(engines, isPhishing) {
-    const container = document.getElementById('llm-engines-grid');
-    if (!container) return;
-
-    if (!engines || engines.length === 0) {
-        engines = getSample10LLMEngines(isPhishing);
-    }
-
-    container.innerHTML = engines.map(eng => {
-        const isPhish = eng.verdict === 'PHISHING';
-        const name = eng.engine || eng.name;
-        const engId = (eng.engine_id || name.toLowerCase().replace(/[^a-z0-9]/g, ''));
-        return `
-            <div class="llm-card ${isPhish ? 'llm-phishing' : 'llm-legit'}" onclick="inspectSingleLLM('${engId}', '${name}')">
-                <input type="checkbox" class="llm-card-select" data-engine-id="${engId}" checked onclick="event.stopPropagation()">
-                <div class="llm-card-header">
-                    <div>
-                        <div class="llm-name">${name}</div>
-                        <span class="dev-badge"><i class="fa-solid fa-building"></i> ${eng.developer || 'AI Provider'}</span>
-                    </div>
-                    <span class="llm-score-badge ${isPhish ? 'score-danger' : 'score-success'}">
-                        ${parseFloat(eng.threat_score || 95).toFixed(1)}%
-                    </span>
-                </div>
-                <div class="llm-verdict">${eng.verdict}</div>
-                <p class="llm-reasoning">${eng.reasoning}</p>
-                <div class="llm-card-footer">
-                    <span><i class="fa-solid fa-bolt"></i> ${eng.latency_ms || 12}ms</span>
-                    <span><i class="fa-solid fa-shield-check"></i> ${eng.confidence || 'HIGH'}</span>
-                    <button class="btn-card-action" onclick="event.stopPropagation(); inspectSingleLLM('${engId}', '${name}')">
-                        Inspect Payload
-                    </button>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-function getSample10LLMEngines(isPhish) {
-    const score = isPhish ? 98.5 : 1.2;
-    const verdict = isPhish ? 'PHISHING' : 'LEGITIMATE';
-    return [
-        { engine: 'GPT-5.5', engine_id: 'gpt55', developer: 'OpenAI', verdict: verdict, threat_score: score, reasoning: 'URL typosquatting and external password posting detected.', latency_ms: 12 },
-        { engine: 'Claude 4 Opus', engine_id: 'claude4opus', developer: 'Anthropic', verdict: verdict, threat_score: score, reasoning: 'DOM tree graph contains cloaked hidden form container.', latency_ms: 15 },
-        { engine: 'Gemini 2.5 Pro', engine_id: 'gemini25pro', developer: 'Google', verdict: verdict, threat_score: score, reasoning: 'Multimodal vision match identifies 98.2% PayPal logo spoofing.', latency_ms: 14 },
-        { engine: 'Llama 3.3 70B Instruct', engine_id: 'llama3370binstruct', developer: 'Meta', verdict: verdict, threat_score: score, reasoning: 'Open-source reasoning identifies zero-day domain anomaly.', latency_ms: 18 },
-        { engine: 'Qwen 3 72B', engine_id: 'qwen372b', developer: 'Alibaba', verdict: verdict, threat_score: score, reasoning: 'Subdomain redirect violates standard RFC security specs.', latency_ms: 16 },
-        { engine: 'DeepSeek-V3', engine_id: 'deepseekv3', developer: 'DeepSeek', verdict: verdict, threat_score: score, reasoning: 'Cybersecurity classification identifies credential harvesting.', latency_ms: 11 },
-        { engine: 'Mistral Large', engine_id: 'mistrallarge', developer: 'Mistral AI', verdict: verdict, threat_score: score, reasoning: 'Structured JSON analysis detects suspicious anchor ratios.', latency_ms: 13 },
-        { engine: 'Command A', engine_id: 'commanda', developer: 'Cohere', verdict: verdict, threat_score: score, reasoning: 'High retrieval score aligns with known phishing campaigns.', latency_ms: 17 },
-        { engine: 'Falcon 180B', engine_id: 'falcon180b', developer: 'TII', verdict: verdict, threat_score: score, reasoning: 'Deep parameter inspection confirms brand spoofing.', latency_ms: 22 },
-        { engine: 'Phi-4', engine_id: 'phi4', developer: 'Microsoft', verdict: verdict, threat_score: score, reasoning: 'Lightweight neural model flags missing SSL certificate.', latency_ms: 9 }
+// --- Evaluation, dataset, history ---
+async function loadEvaluationStatus() {
+    const tbody = document.getElementById('evaluation-tbody');
+    const items = [
+        ['Evaluation metrics', '/api/v1/metrics'],
+        ['Dataset', '/dashboard/datasets'],
+        ['Scan history', '/dashboard/history'],
     ];
-}
-
-
-// --- Render GNN Graph ---
-function renderGNNStats(stats, isPhish) {
-    const nodeCountEl = document.getElementById('node-count-val');
-    const edgeCountEl = document.getElementById('edge-count-val');
-    const densityEl = document.getElementById('density-val');
-    const hiddenEl = document.getElementById('gnn-hidden-count');
-    const pwdEl = document.getElementById('gnn-pwd-target');
-
-    const nodes = stats.node_count || (stats.graph_stats ? stats.graph_stats.node_count : 24);
-    const edges = stats.edge_count || (stats.graph_stats ? stats.graph_stats.edge_count : 38);
-    const density = stats.graph_density || (stats.graph_stats ? stats.graph_stats.graph_density : 0.137);
-
-    if (nodeCountEl) nodeCountEl.textContent = nodes;
-    if (edgeCountEl) edgeCountEl.textContent = edges;
-    if (densityEl) densityEl.textContent = parseFloat(density).toFixed(3);
-
-    const struct = stats.structural_indicators || {};
-    if (hiddenEl) hiddenEl.textContent = `${struct.hidden_form_nodes || (isPhish ? 2 : 0)} Hidden Cloaking Nodes`;
-    if (pwdEl) pwdEl.textContent = (struct.external_password_target_nodes || isPhish) ? 'External Target Endpoint Detected' : 'Safe Internal Form Target';
-
-    drawDOMGraphCanvas(nodes, isPhish);
-}
-
-function drawDOMGraphCanvas(nodeCount, isPhishing) {
-    const canvas = document.getElementById('dom-graph-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const nodes = [];
-    const N = Math.min(nodeCount, 25);
-    
-    for (let i = 0; i < N; i++) {
-        const angle = (i / N) * 2 * Math.PI;
-        const radius = 60 + (i % 3) * 25;
-        const cx = canvas.width / 2 + Math.cos(angle) * radius;
-        const cy = canvas.height / 2 + Math.sin(angle) * (radius * 0.6);
-        nodes.push({ x: cx, y: cy, isAlert: isPhishing && (i === 1 || i === 2) });
-    }
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-            if ((i + j) % 3 === 0) {
-                ctx.beginPath();
-                ctx.moveTo(nodes[i].x, nodes[i].y);
-                ctx.lineTo(nodes[j].x, nodes[j].y);
-                ctx.stroke();
-            }
-        }
-    }
-
-    nodes.forEach((node, idx) => {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.isAlert ? 8 : 5, 0, 2 * Math.PI);
-        ctx.fillStyle = node.isAlert ? '#ef4444' : (idx === 0 ? '#6366f1' : '#10b981');
-        c
-        tx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-    });
-}
-
-// --- Load Dataset Stats & Screenshot Connectors ---
-async function loadDatasetStats() {
-    try {
-        const response = await fetch('/api/v1/dataset_stats');
-        if (!response.ok) return;
-        const data = await response.json();
-
-        const totalEl = document.getElementById('ds-total');
-        const accEl = document.getElementById('ds-acc');
-        const precEl = document.getElementById('ds-prec');
-        const f1El = document.getElementById('ds-f1');
-
-        if (totalEl) totalEl.textContent = (data.total_samples || 10000).toLocaleString();
-        if (accEl) accEl.textContent = data.test_accuracy || '100.00%';
-        if (precEl) precEl.textContent = data.test_precision || '100.00%';
-        if (f1El) f1El.textContent = data.test_f1_score || '100.00%';
-
-        const tbody = document.getElementById('dataset-tbody');
-        if (tbody && data.sample_rows) {
-            tbody.innerHTML = data.sample_rows.map(row => `
-                <tr>
-                    <td><span class="url-text">${row.url || 'http://example.com'}</span></td>
-                    <td><span class="badge badge-accent">${row.dataset_source || 'Kaggle Stream'}</span></td>
-                    <td>${row.prefix_suffix ? 'Yes' : 'No'}</td>
-                    <td>${row.ssl_final_state ? 'Valid' : 'Invalid'}</td>
-                    <td>${row.dom_nodes_count || 15}</td>
-                    <td><span class="badge ${row.label == 1 ? 'badge-danger' : 'badge-success'}">${row.label == 1 ? 'Phishing' : 'Legitimate'}</span></td>
-                </tr>
-            `).join('');
-        }
-
-        // Fetch connected screenshot datasets metadata
-        const ssResp = await fetch('/api/v1/screenshot-datasets');
-        if (ssResp.ok) {
-            const ssData = await ssResp.json();
-            console.log('[Dashboard] Connected Screenshot Repositories:', ssData);
-        }
-    } catch (e) {
-        console.warn('Dataset stats fetch note:', e);
-    }
-}
-
-function renderFallbackResults(targetUrl) {
-    const isPhish = targetUrl.includes('paypal') || targetUrl.includes('login') || targetUrl.includes('verify') || targetUrl.includes('security');
-    renderResults({
-        target_url: targetUrl,
-        final_verdict: isPhish ? 'PHISHING DETECTED' : 'LEGITIMATE SITE (SAFE)',
-        overall_threat_score: isPhish ? 99.1 : 0.1,
-        risk_level: isPhish ? 'CRITICAL RISK' : 'SAFE',
-        attack_category: isPhish ? 'BRAND IMPERSONATION & FAKE LOGO SPOOFING' : 'NONE',
-        confidence_score: 99.8,
-        scan_latency_ms: 14,
-        recommended_actions: isPhish ? "BLOCK IMMEDIATELY: Quarantine URL in gateway firewall, revoke active session tokens, and issue security incident alert." : "ALLOW: Domain verified as safe web infrastructure.",
-        modality_scores: {
-            llm_10_bayesian_consensus: isPhish ? 99.1 : 0.1,
-            gnn_graph_structure: isPhish ? 95.0 : 0.1,
-            vision_transformer_vit: isPhish ? 94.5 : 0.1,
-            classical_ml_ensemble: isPhish ? 98.2 : 0.1,
-            bert_nlp_transformer: isPhish ? 96.8 : 0.1
-        },
-        xai_evidence_matrix: [
-            { modality: 'PyTorch GNN Graph Topology', score: isPhish ? '95.0%' : '0.1%', finding: isPhish ? 'Nodes: 24 | External Password Target Endpoints: 1' : 'Nodes: 12 | Normal Internal Form Targets' },
-            { modality: '10-LLM Bayesian Consensus', score: isPhish ? '99.1%' : '0.1%', finding: isPhish ? '10/10 LLM Unanimous Votes (100% Agreement)' : '0/10 LLM Phishing Votes' },
-            { modality: 'Vision Transformer (ViT)', score: isPhish ? '94.5%' : '0.1%', finding: isPhish ? 'Logo: PayPal Spoofed Logo (98.2% Match)' : 'Logo: Verified Official Brand Signature' },
-            { modality: 'Classical ML (XGBoost/RF/CatBoost)', score: isPhish ? '98.2%' : '0.1%', finding: isPhish ? 'XGBoost: 99.4% | Random Forest: 97.8%' : 'XGBoost: 0.1% | Random Forest: 0.3%' },
-            { modality: 'BERT Transformer NLP', score: isPhish ? '96.8%' : '0.1%', finding: isPhish ? 'Semantic Intent: CREDENTIAL HARVESTING' : 'Semantic Intent: BENIGN INFORMATIONAL' }
-        ]
-    });
-}
-
-// --- Screenshot Verification System Controller ---
-let currentSelectedScreenshotFile = null;
-
-function initScreenshotSystem() {
-    const quickScreenshotBtn = document.getElementById('quick-screenshot-btn');
-    const dropzone = document.getElementById('screenshot-dropzone');
-    const fileInput = document.getElementById('screenshot-file-input');
-    const selectFileBtn = document.getElementById('select-file-btn');
-    const analyzeUrlBtn = document.getElementById('analyze-url-ss-btn');
-    const runAnalysisBtn = document.getElementById('run-ss-analysis-btn');
-    const urlInput = document.getElementById('screenshot-url-input');
-    const ssPresetBtns = document.querySelectorAll('.ss-preset');
-
-    // Quick screenshot button on main scanner bar
-    if (quickScreenshotBtn) {
-        quickScreenshotBtn.addEventListener('click', () => {
-            const ssTabItem = document.querySelector('.nav-item[data-tab="screenshot-tab"]');
-            if (ssTabItem) ssTabItem.click();
-        });
-    }
-
-    // Browse file handlers
-    if (selectFileBtn && fileInput) {
-        selectFileBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            fileInput.click();
-        });
-    }
-
-    if (dropzone && fileInput) {
-        dropzone.addEventListener('click', () => {
-            fileInput.click();
-        });
-
-        // Drag and drop event listeners
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropzone.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                dropzone.classList.add('drag-over');
-            }, false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropzone.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                dropzone.classList.remove('drag-over');
-            }, false);
-        });
-
-        dropzone.addEventListener('drop', (e) => {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            if (files && files.length > 0) {
-                handleSelectedScreenshotFile(files[0]);
-            }
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files.length > 0) {
-                handleSelectedScreenshotFile(e.target.files[0]);
-            }
-        });
-    }
-
-    // URL Capture button handler
-    if (analyzeUrlBtn && urlInput) {
-        analyzeUrlBtn.addEventListener('click', () => {
-            const url = urlInput.value.trim();
-            if (url) {
-                analyzeUrlScreenshot(url);
-            }
-        });
-    }
-
-    // Run analysis button handler on preview card
-    if (runAnalysisBtn) {
-        runAnalysisBtn.addEventListener('click', () => {
-            if (currentSelectedScreenshotFile) {
-                const targetUrl = urlInput ? urlInput.value.trim() : '';
-                uploadAndAnalyzeScreenshot(currentSelectedScreenshotFile, targetUrl);
-            } else {
-                const url = urlInput ? urlInput.value.trim() : 'http://paypal-security-verification-center.com/signin';
-                analyzeUrlScreenshot(url);
-            }
-        });
-    }
-
-    // Preset sample screenshot buttons
-    ssPresetBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const targetUrl = btn.getAttribute('data-url');
-            if (targetUrl && urlInput) {
-                urlInput.value = targetUrl;
-                analyzeUrlScreenshot(targetUrl);
-            }
-        });
-    });
-}
-
-function handleSelectedScreenshotFile(file) {
-    if (!file.type.startsWith('image/')) {
-        alert('Please select a valid image file (PNG, JPG, WEBP).');
-        return;
-    }
-
-    currentSelectedScreenshotFile = file;
-
-    // Show preview
-    const previewContainer = document.getElementById('ss-preview-container');
-    const previewImg = document.getElementById('ss-preview-img');
-    const filenameText = document.getElementById('ss-filename-text');
-    const metaInfo = document.getElementById('ss-meta-info');
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        if (previewImg) previewImg.src = e.target.result;
-        if (filenameText) filenameText.innerHTML = `<i class="fa-solid fa-file-image"></i> ${file.name}`;
-        const sizeKb = (file.size / 1024).toFixed(1);
-        if (metaInfo) metaInfo.textContent = `Source: File Upload | File Size: ${sizeKb} KB | MIME: ${file.type}`;
-        if (previewContainer) previewContainer.classList.remove('hidden');
-    };
-    reader.readAsDataURL(file);
-
-    // Auto trigger analysis
-    const targetUrlInput = document.getElementById('screenshot-url-input');
-    const targetUrl = targetUrlInput ? targetUrlInput.value.trim() : '';
-    uploadAndAnalyzeScreenshot(file, targetUrl);
-}
-
-async function uploadAndAnalyzeScreenshot(file, targetUrl) {
-    const runAnalysisBtn = document.getElementById('run-ss-analysis-btn');
-    const resultsContainer = document.getElementById('ss-results-container');
-
-    if (runAnalysisBtn) {
-        runAnalysisBtn.disabled = true;
-        runAnalysisBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Running 5-Stage Visual AI Pipeline...';
-    }
-
-    try {
-        const formData = new FormData();
-        formData.append('file', file);
-        if (targetUrl) formData.append('target_url', targetUrl);
-
-        const response = await fetch('/api/v1/screenshot/upload', {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) {
-            throw new Error(`Upload API returned status ${response.status}`);
-        }
-
-        const data = await response.json();
-        renderScreenshotResults(data);
-    } catch (err) {
-        console.warn('Screenshot upload API note, executing fallback evaluator:', err);
-        renderFallbackScreenshotResults(file ? file.name : 'uploaded_screenshot.png', targetUrl);
-    } finally {
-        if (runAnalysisBtn) {
-            runAnalysisBtn.disabled = false;
-            runAnalysisBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Run 5-Stage Visual AI Pipeline';
-        }
-        if (resultsContainer) resultsContainer.classList.remove('hidden');
-    }
-}
-
-async function analyzeUrlScreenshot(targetUrl) {
-    const analyzeUrlBtn = document.getElementById('analyze-url-ss-btn');
-    const resultsContainer = document.getElementById('ss-results-container');
-    const previewContainer = document.getElementById('ss-preview-container');
-    const filenameText = document.getElementById('ss-filename-text');
-    const metaInfo = document.getElementById('ss-meta-info');
-
-    if (analyzeUrlBtn) {
-        analyzeUrlBtn.disabled = true;
-        analyzeUrlBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Capturing & Analyzing Viewport...';
-    }
-
-    try {
-        const response = await fetch('/api/v1/screenshot/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: targetUrl, image_path: 'live_url_capture.png' })
-        });
-
-        if (!response.ok) {
-            throw new Error(`Analyze API returned status ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (filenameText) filenameText.innerHTML = `<i class="fa-solid fa-globe"></i> Live Viewport Capture (${targetUrl})`;
-        if (metaInfo) metaInfo.textContent = `Source: Live Headless Chrome Capture | Resolution: 1920x1080 RGB Tensors`;
-        if (previewContainer) previewContainer.classList.remove('hidden');
-
-        renderScreenshotResults(data);
-    } catch (err) {
-        console.warn('Screenshot analyze API note, executing fallback evaluator:', err);
-        renderFallbackScreenshotResults('live_url_capture.png', targetUrl);
-    } finally {
-        if (analyzeUrlBtn) {
-            analyzeUrlBtn.disabled = false;
-            analyzeUrlBtn.innerHTML = '<i class="fa-solid fa-camera"></i> Capture & Analyze URL Screenshot';
-        }
-        if (resultsContainer) resultsContainer.classList.remove('hidden');
-    }
-}
-
-function renderScreenshotResults(data) {
-    const suite = data.mdpi_2026_visual_suite || {};
-    const phishpedia = suite.phishpedia_result || {};
-    const phash = suite.perceptual_hash_baseline || {};
-    const verdictText = suite.hybrid_verdict || (data.form_layout_verdict && data.form_layout_verdict.includes('PHISHING') ? 'PHISHING' : 'BENIGN');
-    const isPhish = verdictText === 'PHISHING';
-
-    const ssVerdictCard = document.getElementById('ss-verdict-card');
-    const ssVerdictTag = document.getElementById('ss-verdict-tag');
-    const ssRiskBadge = document.getElementById('ss-risk-badge');
-    const ssBrandBadge = document.getElementById('ss-brand-badge');
-    const ssScoreVal = document.getElementById('ss-score-val');
-    const ssActionText = document.getElementById('ss-action-text');
-
-    if (ssVerdictCard) ssVerdictCard.className = `verdict-card ${isPhish ? 'card-phishing' : 'card-legitimate'}`;
-    if (ssVerdictTag) {
-        ssVerdictTag.textContent = isPhish ? 'PHISHING DETECTED' : 'LEGITIMATE SITE (SAFE)';
-        ssVerdictTag.className = `verdict-tag ${isPhish ? 'tag-danger' : 'tag-success'}`;
-    }
-    if (ssRiskBadge) {
-        ssRiskBadge.textContent = isPhish ? 'CRITICAL RISK' : 'LOW RISK';
-        ssRiskBadge.className = `risk-badge ${isPhish ? 'risk-critical' : 'risk-low'}`;
-    }
-
-    const detectedLogo = data.detected_logo || phishpedia.impersonated_target || (isPhish ? 'PayPal Logo Bounding Box' : 'Authentic Brand Signature');
-    if (ssBrandBadge) ssBrandBadge.textContent = isPhish ? `SPOOFED BRAND: ${detectedLogo.toUpperCase()}` : 'AUTHENTIC BRAND';
-
-    const threatScore = data.vit_threat_score !== undefined ? data.vit_threat_score : (isPhish ? 96.4 : 1.2);
-    if (ssScoreVal) ssScoreVal.textContent = `${parseFloat(threatScore).toFixed(1)}%`;
-
-    if (ssActionText) {
-        ssActionText.textContent = isPhish
-            ? `FLAGGED: Impersonation of ${detectedLogo} brand elements detected via Siamese logo matcher. Block webpage access immediately.`
-            : "SAFE: Visual features match verified authentic brand signatures with zero brand spoofing signatures.";
-    }
-
-    // Detail rows
-    const ssDetectedLogoEl = document.getElementById('ss-detected-logo');
-    const ssSiameseScoreEl = document.getElementById('ss-siamese-score');
-    const ssLayoutVerdictEl = document.getElementById('ss-layout-verdict');
-    const ssPhashValEl = document.getElementById('ss-phash-val');
-    const ssFaissTargetEl = document.getElementById('ss-faiss-target');
-    const ssPaletteValEl = document.getElementById('ss-palette-val');
-
-    if (ssDetectedLogoEl) ssDetectedLogoEl.textContent = detectedLogo;
-    if (ssSiameseScoreEl) ssSiameseScoreEl.textContent = phishpedia.siamese_similarity_score !== undefined ? `${(phishpedia.siamese_similarity_score * 100).toFixed(1)}% Target Match` : (isPhish ? '98.2% Target Match' : '0.1% Match');
-    if (ssLayoutVerdictEl) ssLayoutVerdictEl.textContent = data.form_layout_verdict || `MDPI 2026 Hybrid Verdict: ${verdictText}`;
-
-    if (ssPhashValEl) ssPhashValEl.textContent = phash.phash_hex || (isPhish ? '0x9F82A41C7E83D012' : '0x00A1F2C3B4E5D6F7');
-    if (ssFaissTargetEl) ssFaissTargetEl.textContent = phash.faiss_nearest_target || (isPhish ? `${detectedLogo} Reference Cluster` : 'Clean Benchmark Reference');
-    if (ssPaletteValEl) ssPaletteValEl.textContent = data.color_palette_similarity || (isPhish ? '96.4% Match to Target Brand Palette' : 'Authentic Brand Palette');
-
-    // OCR tokens
-    const ocrBox = document.getElementById('ss-ocr-tokens-box');
-    const tokens = data.ocr_extracted_text || (isPhish ? ['Sign in to your Account', 'Verification Required', 'Password', 'Security Notice'] : ['Home', 'About', 'Documentation', 'Search']);
-    if (ocrBox) {
-        ocrBox.innerHTML = tokens.map(t => `<span class="ocr-chip"><i class="fa-solid fa-font"></i> ${t}</span>`).join('');
-    }
-}
-
-function renderFallbackScreenshotResults(filename, targetUrl) {
-    const isPhish = targetUrl.includes('paypal') || targetUrl.includes('microsoft') || targetUrl.includes('signin') || targetUrl.includes('bank');
-    renderScreenshotResults({
-        vit_threat_score: isPhish ? 96.4 : 1.2,
-        detected_logo: isPhish ? 'PayPal Logo Bounding Box' : 'Official Brand Signature',
-        form_layout_verdict: `MDPI 2026 Hybrid Verdict: ${isPhish ? 'PHISHING' : 'BENIGN'}`,
-        ocr_extracted_text: isPhish ? ['Sign in to your Account', 'Verification Required', 'Password', 'Security Notice'] : ['Home', 'About', 'Documentation', 'Search'],
-        color_palette_similarity: isPhish ? '96.4% Match to Target Brand Palette' : 'Authentic Brand Palette',
-        mdpi_2026_visual_suite: {
-            hybrid_verdict: isPhish ? 'PHISHING' : 'BENIGN',
-            combined_visual_threat_score: isPhish ? 96.4 : 1.2,
-            phishpedia_result: {
-                impersonated_target: isPhish ? 'PayPal' : 'Legitimate Site',
-                siamese_similarity_score: isPhish ? 0.982 : 0.01
-            },
-            perceptual_hash_baseline: {
-                phash_hex: isPhish ? '0x9F82A41C7E83D012' : '0x00A1F2C3B4E5D6F7',
-                faiss_nearest_target: isPhish ? 'PayPal Reference Cluster' : 'Clean Reference'
-            }
-        }
-    });
-}
-
-function initDatasetFetchButton() {
-    const fetchBtn = document.getElementById('fetch-external-datasets-btn');
-    const statusBox = document.getElementById('live-fetch-status-box');
-
-    if (!fetchBtn) return;
-
-    fetchBtn.addEventListener('click', async () => {
-        fetchBtn.disabled = true;
-        fetchBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connecting to Live Official Repositories...';
-
-        if (statusBox) {
-            statusBox.classList.remove('hidden');
-            statusBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connecting to 3 official dataset URLs: lnu-phish.github.io, hacettepe.edu.tr/~selman/phish360, huggingface.co/datasets/shresthsamyak/phishing-website-screenshots...';
-        }
-
+    const rows = [];
+    for (const [label, url] of items) {
         try {
-            const response = await fetch('/api/v1/datasets/fetch-external', { method: 'POST' });
-            const data = await response.json();
-
-            if (statusBox) {
-                statusBox.innerHTML = `<i class="fa-solid fa-circle-check" style="color: #22c55e;"></i> Live External Sync Complete! Connected to LNU-Phish, Phish360 & Hugging Face datasets (${data.total_collected_screenshots.toLocaleString()} screenshots indexed).`;
-            }
-
-            loadDatasetStats();
+            const data = await fetchJson(url);
+            rows.push(`<tr><td><strong>${escapeHtml(label)}</strong></td><td>${statusBadge(data.status)}</td><td>${escapeHtml(data.reason || '')}</td></tr>`);
         } catch (err) {
-            console.error('External dataset fetch error:', err);
-            if (statusBox) {
-                statusBox.innerHTML = '<i class="fa-solid fa-circle-check" style="color: #38bdf8;"></i> Live Connection Verified: 102,070 screenshots & DOM graphs indexed across connected repositories.';
-            }
-        } finally {
-            fetchBtn.disabled = false;
-            fetchBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> Trigger Live URL Connection & Fetch';
+            rows.push(`<tr><td><strong>${escapeHtml(label)}</strong></td><td>${statusBadge('error')}</td><td>${escapeHtml(err.message)}</td></tr>`);
         }
-    });
+    }
+    tbody.innerHTML = rows.join('');
 }
