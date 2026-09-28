@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 import database
 import llm_ensemble
 import multimodal_fusion
-from component_status import HEURISTIC, NOT_IMPLEMENTED, UNAVAILABLE
+from component_status import AVAILABLE, HEURISTIC, NOT_IMPLEMENTED, UNAVAILABLE
 from llm_ensemble import LLMEngine, get_llm_orchestrator, parse_llm_json
 from mlops_service import MLOpsRegistryManager
 from services import (
@@ -146,11 +146,20 @@ def test_js_indicators_are_labelled_heuristic_without_score():
 
 # --- Services ---
 
-def test_crawler_never_invents_html():
-    res = CrawlerService.crawl("http://paypal-verification.com/login", "")
+def test_crawler_never_invents_html_when_network_is_blocked():
+    # The autouse block_real_network fixture blocks this non-local host, so the crawl fails.
+    # Even so, no synthetic page is invented, matching the pre-Phase-2 crawler's behaviour.
+    res = asyncio.run(CrawlerService.crawl("http://paypal-verification.com/login", ""))
     assert res["status"] == UNAVAILABLE
     assert res["html_content"] == ""
     assert "headers" not in res
+
+
+def test_crawler_uses_supplied_html_without_any_network_call():
+    res = asyncio.run(CrawlerService.crawl("http://any-host-would-be-blocked.example", "<html></html>"))
+    assert res["status"] == AVAILABLE
+    assert res["source"] == "request_html_content"
+    assert res["html_content"] == "<html></html>"
 
 
 @pytest.mark.parametrize("call", [
