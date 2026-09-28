@@ -114,7 +114,19 @@ async function performScan(url) {
     }
 }
 
+function renderCrawl(crawl) {
+    const box = document.getElementById('crawl-box');
+    if (!crawl) { box.innerHTML = ''; return; }
+    if (crawl.status === 'available') {
+        const { status, component, headers, html_length_bytes, visible_text, ...stats } = crawl;
+        box.innerHTML = `${statusBadge(status)} ${rowsHtml({ ...stats, html_length_bytes })}`;
+    } else {
+        box.innerHTML = unavailableHtml(crawl);
+    }
+}
+
 function renderReport(report) {
+    renderCrawl(report.crawl);
     document.getElementById('verdict-val').textContent = report.verdict === null ? 'Not available' : report.verdict;
     document.getElementById('probability-val').textContent =
         report.phishing_probability === null ? 'Not available' : report.phishing_probability;

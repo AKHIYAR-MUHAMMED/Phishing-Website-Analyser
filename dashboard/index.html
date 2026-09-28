@@ -59,8 +59,9 @@
                         </button>
                     </div>
                     <p class="status-note mt-2">
-                        Live crawling is not implemented yet. Paste the page HTML below to analyse its structure;
-                        without HTML only the URL is analysed.
+                        If you leave HTML empty, the page is fetched live with a GET request (8s timeout,
+                        5 redirects, 2MB size limit; no forms are submitted). Paste HTML instead to analyse a
+                        specific snapshot without a network request.
                     </p>
                     <textarea id="html-content-input" class="batch-textarea" rows="5" placeholder="Optional: page HTML"></textarea>
                 </div>
@@ -71,6 +72,11 @@
                 </div>
 
                 <div id="results-container" class="hidden">
+                    <div class="card-box mt-4">
+                        <h3><i class="fa-solid fa-globe"></i> Crawl</h3>
+                        <div id="crawl-box"></div>
+                    </div>
+
                     <div class="card-box mt-4">
                         <h3><i class="fa-solid fa-scale-balanced"></i> Decision</h3>
                         <div class="intel-row"><span>Verdict</span> <strong id="verdict-val"></strong></div>

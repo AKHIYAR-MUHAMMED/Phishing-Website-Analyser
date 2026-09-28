@@ -1,9 +1,9 @@
 """
 Crawler & ingestion service.
 
-Live URL fetching is not implemented yet (planned: Phase 2). Only HTML supplied with the
-request is used. The previous version returned a synthetic page and hard-coded HTTP headers
-when no HTML was supplied; that behaviour is removed.
+Fetches HTML live when the request supplies none (crawler/fetcher.py: timeout, redirect and
+size limits, explicit failure states). If the request supplies HTML directly, that HTML is
+used unchanged and no network request is made.
 """
 
 from typing import Any, Dict
@@ -13,8 +13,9 @@ from multimodal_fusion import describe_crawl
 
 class CrawlerService:
     @staticmethod
-    def crawl(url: str, html_payload: str = "") -> Dict[str, Any]:
-        result = describe_crawl(url, html_payload)
+    async def crawl(url: str, html_payload: str = "") -> Dict[str, Any]:
+        crawl_status, effective_html = await describe_crawl(url, html_payload)
+        result = dict(crawl_status)
         result["url"] = url
-        result["html_content"] = html_payload or ""
+        result["html_content"] = effective_html
         return result

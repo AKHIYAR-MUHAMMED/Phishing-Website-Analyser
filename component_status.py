@@ -21,8 +21,9 @@ NOT_EVALUATED = "not_evaluated"
 
 REASONS: Dict[str, str] = {
     "crawler": (
-        "Live URL fetching is not implemented yet (planned: Phase 2). "
-        "Only HTML supplied in the request is analysed."
+        "Fetches the URL with a single GET request (timeout, redirect-count and response-size "
+        "limits apply; no forms are submitted; see crawler/fetcher.py). Used only when the "
+        "request supplies no HTML; request-supplied HTML is always used instead, unchanged."
     ),
     "gnn": (
         "The saved GNN weights (gnn_model.pt) were trained on synthetic template graphs, "
@@ -96,7 +97,7 @@ def component_registry() -> List[Dict[str, Any]]:
     llm_ready = [e["name"] for e in llm_engines if e["implemented"] and e["api_key_configured"]]
 
     return [
-        {"id": "crawler", "name": "Web crawler", "status": UNAVAILABLE, "reason": REASONS["crawler"]},
+        {"id": "crawler", "name": "Web crawler", "status": AVAILABLE, "reason": REASONS["crawler"]},
         {"id": "url_features", "name": "URL lexical features", "status": AVAILABLE,
          "reason": "Computed from the URL string (observed features, not a classifier)."},
         {"id": "dom_graph", "name": "DOM graph construction", "status": AVAILABLE,
