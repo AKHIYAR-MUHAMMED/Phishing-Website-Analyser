@@ -7,7 +7,9 @@ network guard blocks them rather than silently reaching a real host.
 """
 
 import asyncio
+import io
 import json
+import zipfile
 
 from dataset.manifest import load_manifest
 from dataset.persistence import read_used_tranco_ranks
@@ -327,3 +329,34 @@ def test_run_collection_is_reproducible_given_the_same_seed_21_1_item_1(tmp_path
     assert manifest_a == manifest_b
 
     assert result_a["selection_rows"] == result_b["selection_rows"]
+
+
+def test_run_collection_handles_a_zip_wrapped_tranco_feed(tmp_path, http_server):
+    """Real-feed format probe (2026-09-29): the real Tranco endpoint returns a ZIP archive, not
+    plain CSV. This proves the fetch-through-parse path for Tranco actually handles that shape,
+    not just the unit-level unwrap function in isolation."""
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w") as z:
+        z.writestr("top-1m.csv", "1,blocked.example\n2,blocked2.example\n")
+    tranco_zip_body = zip_buf.getvalue()
+
+    feed_server = _build_feed_server(http_server, tranco_body=tranco_zip_body)
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0, benign_target_count=2,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    # Both ranks parsed out of the ZIP-wrapped CSV and sampled — proves the archive was
+    # unwrapped and handed to parse_tranco_feed correctly, not silently dropped or garbled.
+    assert result["summary"]["ranks_sampled"] == [1, 2]
+    # The committed feed digest still hashes the RAW (zipped) response, not the unwrapped CSV.
+    tranco_digest = next(d for d in result["summary"]["feed_digests"] if d["source"] == "tranco")
+    import hashlib
+    assert tranco_digest["sha256"] == hashlib.sha256(tranco_zip_body).hexdigest()

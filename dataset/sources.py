@@ -14,7 +14,18 @@ point collection at the local test server instead.
 import csv
 import io
 import urllib.parse
+import zipfile
 from typing import Any, Dict, List, Tuple
+
+
+class TrancoFeedFormatError(RuntimeError):
+    """Raised when a Tranco feed response looks like a ZIP archive but is not one, or does not
+    contain exactly the expected CSV member. A feed source changing shape underneath the parser
+    must be surfaced loudly, never silently misparsed as zero/garbage rows."""
+
+
+_TRANCO_ZIP_MAGIC = b"PK\x03\x04"
+_TRANCO_EXPECTED_CSV_MEMBER = "top-1m.csv"
 
 
 def phishtank_bulk_feed_url(app_key: str = "") -> str:
@@ -28,8 +39,45 @@ def openphish_feed_url() -> str:
     return "https://openphish.com/feed.txt"
 
 
-def tranco_list_url(list_id: str) -> str:
-    return f"https://tranco-list.eu/download/{list_id}/full"
+def tranco_list_url(list_id: str = "daily") -> str:
+    """Real-feed format probe (2026-09-29): tranco-list.eu/top-1m.csv.zip redirects to
+    tranco-list.eu/download/daily/top-1m.csv.zip, which returns a ZIP archive containing
+    top-1m.csv (see unwrap_tranco_feed_bytes()). This builder reproduces that VERIFIED shape,
+    parameterized by list_id (default "daily", the always-current list — the only value this
+    was actually verified against). A specific archived Tranco list_id's exact response shape
+    (ZIP vs. plain CSV) was NOT verified by that probe; unwrap_tranco_feed_bytes() passes
+    through unchanged content that isn't a ZIP, so a plain-CSV response for a non-"daily"
+    list_id is still handled correctly, but this has not been tested against a real one."""
+    return f"https://tranco-list.eu/download/{list_id}/top-1m.csv.zip"
+
+
+def unwrap_tranco_feed_bytes(raw_bytes: bytes) -> bytes:
+    """The real Tranco daily-list endpoint returns a ZIP archive containing one CSV member
+    (verified: real-feed format probe, 2026-09-29). If `raw_bytes` does not start with the ZIP
+    magic number, it is returned unchanged — safe to call unconditionally regardless of which
+    real shape a given endpoint actually returns (e.g. a plain-CSV endpoint needs no unwrapping).
+
+    If `raw_bytes` DOES look like a ZIP, it must contain exactly one member, named exactly
+    top-1m.csv — the expected CSV member is validated by name, never assumed to be "whichever
+    file happens to be first" in the archive. Any other archive layout, or a response that
+    starts with the ZIP magic but isn't a valid ZIP, raises TrancoFeedFormatError rather than
+    silently returning zero/garbage parsed rows."""
+    if not raw_bytes.startswith(_TRANCO_ZIP_MAGIC):
+        return raw_bytes
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw_bytes)) as archive:
+            names = archive.namelist()
+            if names != [_TRANCO_EXPECTED_CSV_MEMBER]:
+                raise TrancoFeedFormatError(
+                    f"Expected a ZIP containing exactly {_TRANCO_EXPECTED_CSV_MEMBER!r}, "
+                    f"found {names!r}."
+                )
+            with archive.open(_TRANCO_EXPECTED_CSV_MEMBER) as member:
+                return member.read()
+    except zipfile.BadZipFile as exc:
+        raise TrancoFeedFormatError(
+            f"Tranco response starts with a ZIP signature but could not be opened: {exc}"
+        ) from exc
 
 
 def parse_phishtank_feed(raw_bytes: bytes) -> Tuple[List[Dict[str, Any]], List[str]]:

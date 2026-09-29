@@ -217,7 +217,11 @@ async def run_collection(
 
     phishtank_rows, phishtank_malformed = sources.parse_phishtank_feed(phishtank_bytes)
     openphish_rows, openphish_malformed = sources.parse_openphish_feed(openphish_bytes)
-    tranco_rows, tranco_malformed = sources.parse_tranco_feed(tranco_bytes)
+    # The real Tranco endpoint returns a ZIP archive (real-feed format probe, 2026-09-29); the
+    # digest below is still computed over the RAW response (tranco_bytes, unmodified) so it
+    # reflects exactly what the server returned, while parsing uses the unwrapped CSV.
+    tranco_csv_bytes = sources.unwrap_tranco_feed_bytes(tranco_bytes)
+    tranco_rows, tranco_malformed = sources.parse_tranco_feed(tranco_csv_bytes)
 
     feed_digests = []
     for source_name, endpoint, raw_bytes, rows in (
