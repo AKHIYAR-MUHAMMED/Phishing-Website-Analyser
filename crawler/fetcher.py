@@ -7,6 +7,7 @@ for single interactive requests, not for unattended bulk crawling. Add both befo
 bulk-collection use (Phase 3 dataset collection) of this module.
 """
 
+import hashlib
 import ssl
 import time
 import urllib.parse
@@ -128,6 +129,12 @@ async def fetch_url(
             "headers": dict(response.headers),
             "html": html,
             "html_length_bytes": len(body),
+            # Hash of the raw wire bytes, before decoding. Added for Phase 3 (see
+            # PHASE3_DATASET_PLAN.md section 6): this is the only one of that section's three
+            # hashes that cannot be computed by a caller after the fact, since the raw bytes
+            # exist only here, briefly, before being decoded and discarded. Additive field;
+            # does not change any existing behavior or key.
+            "raw_content_sha256": hashlib.sha256(bytes(body)).hexdigest(),
             "title": title,
             "visible_text": visible_text,
             "redirect_count": len(response.history),

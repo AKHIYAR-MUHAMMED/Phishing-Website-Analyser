@@ -28,6 +28,12 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Phase 3 dataset collection (PHASE3_DATASET_PLAN.md section 11): raw feed downloads and raw
+# HTML snapshots stay local-only and are never committed. Everything under data/derived/,
+# data/splits/, data/feed_digests/, data/backups/*.sha256 and data/DATASET_CARD.md IS a
+# committed artifact and must not be excluded by this rule.
+data/raw/
+
 # Generated Slide Images
 slide_images/
 cv_slide_images/
