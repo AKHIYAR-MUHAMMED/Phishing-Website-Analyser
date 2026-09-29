@@ -646,3 +646,270 @@ def test_run_collection_isolation_is_deterministic_across_repeated_runs(tmp_path
     assert results[1]["summary"]["feed_source_status"]["phishtank"]["status"] == "fetch_error"
     assert results[0]["summary"]["ranks_sampled"] == results[1]["summary"]["ranks_sampled"]
     assert results[0]["summary"]["by_crawl_status"] == results[1]["summary"]["by_crawl_status"]
+
+
+# --- Bug 1 follow-up: run_collection() must still complete when a snapshot goes missing
+# between being captured and the finalization step re-reading it (the real pilot's failure). ---
+
+def test_run_collection_completes_when_a_snapshot_vanishes_before_finalization(tmp_path, http_server, monkeypatch):
+    """Simulates external interference mid-run (the pilot's working theory: antivirus/quarantine
+    removed a just-written phishing snapshot before write_backup_listing() re-read it) via a
+    monkeypatched save_snapshot() that deletes an EARLIER snapshot as a side effect of writing a
+    LATER one. run_collection() must still complete: run_summary.json written, the integrity
+    failure reported (not silently dropped, not a crash), and DATASET_CARD.md must warn about it."""
+    import dataset.capture as capture_module
+
+    real_save_snapshot = capture_module.save_snapshot
+    state = {"written": [], "sabotaged": False}
+
+    def sabotaging_save_snapshot(html, html_sha256, base_dir):
+        logical_path = real_save_snapshot(html, html_sha256, base_dir)
+        physical_path = Path(base_dir) / f"{html_sha256}.html"
+        state["written"].append(physical_path)
+        if len(state["written"]) == 2 and not state["sabotaged"]:
+            state["written"][0].unlink()  # remove the FIRST successfully-written snapshot
+            state["sabotaged"] = True
+        return logical_path
+
+    monkeypatch.setattr(capture_module, "save_snapshot", sabotaging_save_snapshot)
+
+    phishtank_csv = (
+        "phish_id,url,phish_detail_url,submission_time,verified,verification_time,online,target\n"
+        f"1,{http_server.url('/ok')},http://x,2026-01-01,yes,2026-01-01,yes,PayPal\n"
+    ).encode("utf-8")
+    openphish_txt = (http_server.url("/big/50") + "\n").encode("utf-8")
+    feed_server = FeedTestServer({
+        "/phishtank.csv": phishtank_csv, "/openphish.txt": openphish_txt, "/tranco.csv": b"",
+    }).start()
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    assert state["sabotaged"] is True  # the test actually exercised the failure path
+
+    # run_summary.json was still written despite the integrity failure — this is exactly what
+    # crashed (never got written at all) in the real pilot run.
+    assert Path(result["run_summary_path"]).exists()
+    run_summary = json.loads(Path(result["run_summary_path"]).read_text(encoding="utf-8"))
+    assert len(run_summary["snapshot_integrity_failures"]) == 1
+    assert run_summary["snapshot_integrity_failures"][0]["type"] == "missing_or_unreadable"
+
+    assert len(result["summary"]["snapshot_integrity_failures"]) == 1
+
+    card_text = Path(result["card_path"]).read_text(encoding="utf-8")
+    assert "WARNING" in card_text
+    assert "1 snapshot(s) failed integrity verification" in card_text
+
+    from dataset.redaction import scan_text_for_secrets
+    assert scan_text_for_secrets(card_text) == []
+
+
+# --- Bug 2: opt-in phishing-side pilot cap ---
+
+def _phishing_scale_feed_server(http_server, phishtank_count=6, openphish_count=4):
+    phishtank_lines = "".join(
+        f"{i},{http_server.url(f'/big/{i}')},http://x,2026-01-01,yes,2026-01-01,yes,T{i}\n"
+        for i in range(1, phishtank_count + 1)
+    )
+    phishtank_csv = (
+        "phish_id,url,phish_detail_url,submission_time,verified,verification_time,online,target\n"
+        + phishtank_lines
+    ).encode("utf-8")
+    openphish_txt = "".join(
+        http_server.url(f"/big/{100 + i}") + "\n" for i in range(1, openphish_count + 1)
+    ).encode("utf-8")
+    return FeedTestServer({
+        "/phishtank.csv": phishtank_csv, "/openphish.txt": openphish_txt, "/tranco.csv": b"",
+    }).start()
+
+
+def test_run_collection_phishing_target_count_caps_the_final_crawl_target_count(tmp_path, http_server):
+    feed_server = _phishing_scale_feed_server(http_server)  # 10 distinct phishing URLs total
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            phishing_target_count=4, benign_target_count=0,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    assert result["summary"]["phishing_feed_row_count"] == 10  # true feed size, unaffected
+    assert result["summary"]["phishing_targets"] <= 4
+    manifest_rows = load_manifest(tmp_path / "manifest.csv")
+    phishing_rows = [r for r in manifest_rows if "phishtank" in r["source"] or "openphish" in r["source"]]
+    assert len(phishing_rows) <= 4
+
+
+def test_run_collection_phishing_target_count_same_seed_is_deterministic(tmp_path, http_server):
+    feed_server = _phishing_scale_feed_server(http_server)
+    try:
+        results = []
+        for i in range(2):
+            results.append(asyncio.run(run_collection(
+                run_date="2026-01-01", version="v1",
+                phishtank_endpoint=feed_server.url("/phishtank.csv"),
+                openphish_endpoint=feed_server.url("/openphish.txt"),
+                tranco_endpoint=feed_server.url("/tranco.csv"),
+                tranco_list_id="test-list", seed=7, host_delay_seconds=0.0,
+                phishing_target_count=4, benign_target_count=0,
+                **_paths(tmp_path / f"run{i}"),
+            )))
+    finally:
+        feed_server.stop()
+
+    urls_a = {r["url"] for r in results[0]["captured_rows"] if r["label"] == 1}
+    urls_b = {r["url"] for r in results[1]["captured_rows"] if r["label"] == 1}
+    assert urls_a == urls_b
+
+
+def test_run_collection_phishing_target_count_different_seeds_can_differ(tmp_path, http_server):
+    feed_server = _phishing_scale_feed_server(http_server)
+    try:
+        result_a = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            phishing_target_count=3, benign_target_count=0,
+            **_paths(tmp_path / "a"),
+        ))
+        result_b = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=99, host_delay_seconds=0.0,
+            phishing_target_count=3, benign_target_count=0,
+            **_paths(tmp_path / "b"),
+        ))
+    finally:
+        feed_server.stop()
+
+    urls_a = {r["url"] for r in result_a["captured_rows"] if r["label"] == 1}
+    urls_b = {r["url"] for r in result_b["captured_rows"] if r["label"] == 1}
+    assert urls_a != urls_b
+
+
+def test_run_collection_phishing_target_count_omitted_preserves_unlimited_behavior(tmp_path, http_server):
+    feed_server = _phishing_scale_feed_server(http_server)
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            benign_target_count=0,  # phishing_target_count intentionally omitted
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+    assert result["summary"]["phishing_targets"] == 10
+    assert result["summary"]["phishing_feed_row_count"] == 10
+
+
+def test_run_collection_phishing_target_count_negative_selects_zero_not_a_negative_slice(tmp_path, http_server):
+    """Freebuff review follow-up: Python's negative-index slicing (shuffled[:-1], shuffled[:-3])
+    would silently keep almost the entire list for a negative count — the opposite of what a
+    safety-oriented pilot-size parameter should do. count <= 0 must select zero phishing
+    targets, matching sample_benign_ranks()'s own target_count <= 0 convention."""
+    feed_server = _phishing_scale_feed_server(http_server)  # 10 distinct phishing URLs total
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            phishing_target_count=-1, benign_target_count=0,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    assert result["summary"]["phishing_feed_row_count"] == 10  # true feed size still reported
+    assert result["summary"]["phishing_targets"] == 0
+    assert result["summary"]["targets_attempted"] == 0
+    manifest_rows = load_manifest(tmp_path / "manifest.csv")
+    assert manifest_rows == []
+
+
+def test_run_collection_phishing_cap_sizes_the_implicit_benign_default(tmp_path, http_server):
+    """Section 9's benign target_count defaults to len(phishing_targets) when benign_target_count
+    is omitted — this must use the CAPPED phishing count, not the original 10-row feed size."""
+    tranco_csv = b"".join(f"{i},blocked{i}.example\n".encode() for i in range(1, 11))
+    phishtank_lines = "".join(
+        f"{i},{http_server.url(f'/big/{i}')},http://x,2026-01-01,yes,2026-01-01,yes,T{i}\n"
+        for i in range(1, 7)
+    )
+    phishtank_csv = (
+        "phish_id,url,phish_detail_url,submission_time,verified,verification_time,online,target\n"
+        + phishtank_lines
+    ).encode("utf-8")
+    openphish_txt = "".join(
+        http_server.url(f"/big/{100 + i}") + "\n" for i in range(1, 5)
+    ).encode("utf-8")
+    feed_server = FeedTestServer({
+        "/phishtank.csv": phishtank_csv, "/openphish.txt": openphish_txt, "/tranco.csv": tranco_csv,
+    }).start()
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            phishing_target_count=3,  # benign_target_count intentionally omitted
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+    assert result["summary"]["phishing_targets"] == 3
+    assert result["summary"]["benign_homepage_targets"] == 3
+
+
+def test_run_collection_phishing_cap_composes_with_in_run_dedup(tmp_path, http_server):
+    """C-1's cross-source dedup must still work on whatever survives the cap: a URL shared by
+    both phishing feeds should still merge into one crawl target with combined provenance, even
+    when phishing_target_count is capping the overall list. The invariant is <=k after dedup,
+    never necessarily ==k (duplicates among the capped survivors legitimately reduce it further)."""
+    shared_url = http_server.url("/ok")
+    phishtank_csv = (
+        "phish_id,url,phish_detail_url,submission_time,verified,verification_time,online,target\n"
+        f"1,{shared_url},http://x,2026-01-01,yes,2026-01-01,yes,PayPal\n"
+    ).encode("utf-8")
+    openphish_txt = (shared_url + "\n").encode("utf-8")  # same URL, second source
+    feed_server = FeedTestServer({
+        "/phishtank.csv": phishtank_csv, "/openphish.txt": openphish_txt, "/tranco.csv": b"",
+    }).start()
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            phishing_target_count=2, benign_target_count=0,  # cap >= the 2 pre-dedup rows
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    manifest_rows = load_manifest(tmp_path / "manifest.csv")
+    assert len(manifest_rows) == 1  # merged into one crawl attempt, not two
+    assert manifest_rows[0]["source"] == "phishtank;openphish"
+    assert result["summary"]["phishing_targets"] <= 2

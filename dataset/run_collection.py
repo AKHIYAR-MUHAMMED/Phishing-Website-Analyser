@@ -25,6 +25,7 @@ One call to run_collection() performs one full run:
 
 import asyncio
 import json
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -118,6 +119,36 @@ def _dedupe_targets_by_normalized_url(targets: List[Dict[str, Any]]) -> List[Dic
         )
         result.append(entry)
     return result
+
+
+def _cap_targets(
+    targets: List[Dict[str, Any]], count: Optional[int], seed: Optional[int],
+) -> List[Dict[str, Any]]:
+    """Pilot-scale control (independent of Tranco's own without-replacement rank sampling): if
+    `count` is given and smaller than `len(targets)`, returns a deterministic, seeded-shuffle
+    subset of that size; otherwise returns `targets` unchanged (in particular, `count=None` —
+    the default — never alters production/full-collection behavior).
+
+    Applied to the COMBINED, pre-dedup target list, before any real network request — a target
+    surviving the cap still goes through the normal dedup/provenance-merge logic afterward
+    unchanged, so the final crawl-target count can be <= `count` (never >), not necessarily
+    exactly `count` (duplicate URLs among the capped survivors may still merge).
+
+    A seeded shuffle-then-truncate, not "first N of source A then source B", so a small cap is
+    not structurally biased toward whichever source happened to be concatenated first.
+
+    `count <= 0` returns [] (not Python's negative-slice behavior, which would silently keep
+    almost the entire list for e.g. count=-1) — matches sample_benign_ranks()'s own
+    `target_count <= 0` convention, appropriate for a safety-oriented pilot-size parameter.
+    """
+    if count is None or count >= len(targets):
+        return targets
+    if count <= 0:
+        return []
+    rng = random.Random(config.RANDOM_SEED if seed is None else seed)
+    shuffled = list(targets)
+    rng.shuffle(shuffled)
+    return shuffled[:count]
 
 
 async def _fetch_and_parse_feed_source(fetch_fn, parse_fn):
@@ -254,6 +285,7 @@ async def run_collection(
     tranco_endpoint: str,
     tranco_list_id: str = "",
     seed: Optional[int] = None,
+    phishing_target_count: Optional[int] = None,
     benign_target_count: Optional[int] = None,
     benign_url_scheme: str = "https",
     concurrency: Optional[int] = None,
@@ -341,6 +373,11 @@ async def run_collection(
         {"url": r["url"], "source": "openphish", "label": 1, "source_metadata": r["source_metadata"]}
         for r in openphish_rows
     ]
+    true_phishing_feed_row_count = len(phishing_targets)
+    # Pilot-scale control (opt-in; None preserves today's unlimited behavior). Applied BEFORE
+    # real crawling AND before benign's own implicit sizing below, so a capped pilot doesn't
+    # accidentally sample a benign count matching the ORIGINAL uncapped phishing volume.
+    phishing_targets = _cap_targets(phishing_targets, phishing_target_count, seed)
 
     # --- Sample benign homepage targets (labeled 0), rank-progressive w/o replacement (section 9) ---
     used_ranks = persistence.read_used_tranco_ranks(tranco_used_ranks_path)
@@ -419,18 +456,27 @@ async def run_collection(
 
     selection_path = persistence.write_selection(selection_rows, version, derived_dir)
     split_paths = persistence.write_splits(selection_rows, splits_dir)
-    card_written_path = persistence.write_dataset_card(
-        full_manifest_rows, selection_rows, version, card_path,
-        feed_digests=feed_digests, psl_snapshot_date=PSL_SOURCE,
-    )
 
-    # --- Out-of-band backup checksum listing (section 19; the archive/copy step is manual, 21.2) ---
-    this_run_html_paths = [
-        raw_html_dir / Path(row["html_snapshot_path"]).name
+    # --- Out-of-band backup checksum listing (section 19; the archive/copy step is manual, 21.2)
+    # --- Computed BEFORE the card so a snapshot integrity failure can be reported in it (a real
+    # pilot run hit exactly this: a captured, manifest-recorded snapshot vanished before this
+    # step re-read it — handled per-file now, never aborts the rest of finalization). Each
+    # file's EXPECTED hash comes from the manifest row that captured it (the source of truth),
+    # not guessed from the filename.
+    this_run_html_records = [
+        (raw_html_dir / Path(row["html_snapshot_path"]).name, row["html_sha256"])
         for row in captured_rows
         if row.get("crawl_status") == "ok" and row.get("html_snapshot_path")
     ]
-    backup_listing_path = persistence.write_backup_listing(this_run_html_paths, run_date, backups_dir)
+    backup_listing_path, snapshot_integrity_failures = persistence.write_backup_listing(
+        this_run_html_records, run_date, backups_dir,
+    )
+
+    card_written_path = persistence.write_dataset_card(
+        full_manifest_rows, selection_rows, version, card_path,
+        feed_digests=feed_digests, psl_snapshot_date=PSL_SOURCE,
+        snapshot_integrity_failures=snapshot_integrity_failures,
+    )
 
     status_counts: Dict[str, int] = {}
     for row in captured_rows:
@@ -440,6 +486,7 @@ async def run_collection(
         "run_date": run_date,
         "version": version,
         "targets_attempted": len(stage1_targets) + len(stage2_targets),
+        "phishing_feed_row_count": true_phishing_feed_row_count,
         "phishing_targets": len(phishing_targets),
         "benign_homepage_targets": len(benign_homepage_targets),
         "benign_second_page_targets": len(stage2_targets),
@@ -455,6 +502,7 @@ async def run_collection(
         "feed_source_status": feed_source_status,
         "feed_digests": feed_digests,
         "backup_listing_path": str(backup_listing_path),
+        "snapshot_integrity_failures": snapshot_integrity_failures,
         "backup_archive_off_machine_confirmed": False,  # manual step, section 21.2 — never asserted true by code
         "psl_snapshot_date": PSL_SOURCE,
     }

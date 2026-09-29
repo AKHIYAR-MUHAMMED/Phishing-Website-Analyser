@@ -93,6 +93,28 @@ def test_generate_card_notes_backup_is_a_manual_check():
     assert "Not verifiable by this generator" in card
 
 
+def test_generate_card_warns_when_snapshot_integrity_failures_exist():
+    failures = [
+        {"path": "data/raw/html/abc.html", "expected_sha256": "abc", "type": "missing_or_unreadable",
+         "error": "FileNotFoundError: [Errno 2] No such file or directory"},
+    ]
+    card = generate_card(MANIFEST_ROWS, SELECTION_ROWS, "v1", snapshot_integrity_failures=failures)
+    assert "WARNING" in card
+    assert "1 snapshot(s) failed integrity verification" in card
+    # Still notes the manual backup-confirmation step alongside the warning, not instead of it.
+    assert "MANUAL" in card
+
+
+def test_generate_card_has_no_integrity_warning_when_all_snapshots_are_clean():
+    card = generate_card(MANIFEST_ROWS, SELECTION_ROWS, "v1", snapshot_integrity_failures=[])
+    assert "WARNING" not in card
+    assert "failed integrity verification" not in card
+
+    # Also the default (parameter omitted entirely) — same clean result.
+    card_default = generate_card(MANIFEST_ROWS, SELECTION_ROWS, "v1")
+    assert "WARNING" not in card_default
+
+
 def test_generate_card_reports_a_failed_source_explicitly():
     digests = [
         {"source": "phishtank", "status": "fetch_error", "error_message": "HTTPStatusError: 403 Forbidden",

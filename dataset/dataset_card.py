@@ -125,8 +125,10 @@ def generate_card(
     version: str,
     feed_digests: Optional[List[Dict[str, Any]]] = None,
     psl_snapshot_date: str = "",
+    snapshot_integrity_failures: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     feed_digests = feed_digests or []
+    snapshot_integrity_failures = snapshot_integrity_failures or []
 
     run_dates = sorted({r.get("collection_run_date", "") for r in manifest_rows if r.get("collection_run_date")})
     label_status = _label_status_matrix(manifest_rows)
@@ -313,6 +315,17 @@ def generate_card(
     lines.append("")
 
     lines.append("## 13. Backup confirmation")
+    if snapshot_integrity_failures:
+        lines.append(
+            f"**WARNING: {len(snapshot_integrity_failures)} snapshot(s) failed integrity "
+            "verification** (missing, unreadable, or content that does not match the manifest's "
+            "recorded `html_sha256`) — see this run's `run_<date>_summary.json` "
+            "(`snapshot_integrity_failures`) and the backup directory's "
+            "`run_<date>_manifest.integrity_failures.json` for exactly which files and why. "
+            "A failed snapshot's manifest row is NOT rewritten because of this — capture-time "
+            "truth remains immutable — but the underlying file may need to be re-crawled or "
+            "restored from an earlier backup before this version's affected rows can be trusted."
+        )
     lines.append("**MANUAL** — confirm the out-of-band backup for this version's contributing "
                  "runs completed (PHASE3_DATASET_PLAN.md section 19) before treating this "
                  "version as final. Not verifiable by this generator.")
