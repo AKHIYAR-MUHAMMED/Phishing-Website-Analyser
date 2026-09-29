@@ -43,6 +43,17 @@ def redact_url(url: str) -> str:
     return urllib.parse.urlunsplit(parsed._replace(query=new_query))
 
 
+def redact_text(text: str) -> str:
+    """Like redact_url(), but for arbitrary free text rather than a well-formed URL — e.g. an
+    exception message, which can itself embed a URL (httpx's own error strings include the
+    request URL) and therefore a real secret-shaped query parameter value. Applies the same
+    secret-shaped-substring pattern wherever it appears in the text, not just inside a query
+    string."""
+    if not text:
+        return text
+    return _SECRET_PATTERN.sub(lambda m: f"{m.group(1)}={REDACTED_PLACEHOLDER}", text)
+
+
 def scan_text_for_secrets(text: str) -> list:
     """Returns the list of matched secret-shaped substrings found in `text` (empty if clean).
     Used to check a generated artifact (dataset card, run summary, log) before it is treated as

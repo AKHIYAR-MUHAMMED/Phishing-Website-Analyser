@@ -175,11 +175,25 @@ def generate_card(
 
     lines.append("## 2. Sources")
     if feed_digests:
+        # "status" defaults to "ok" for a digest that carries no status field at all (the
+        # shape compute_feed_digest() has always produced) — a source that FAILED to fetch or
+        # parse always carries an explicit non-"ok" status, so a failed source is never
+        # rendered indistinguishably from a normal, successful one that simply had no error.
         lines.append(_markdown_table(
-            ["source", "endpoint", "timestamp", "sha256", "row_count"],
-            [[d.get("source", ""), d.get("endpoint", ""), d.get("timestamp", ""),
-              d.get("sha256", ""), d.get("row_count", "")] for d in feed_digests],
+            ["source", "status", "endpoint", "timestamp", "sha256", "row_count", "error"],
+            [[d.get("source", ""), d.get("status", "ok"), d.get("endpoint", ""), d.get("timestamp", ""),
+              d.get("sha256", ""), d.get("row_count", ""), d.get("error_message", "")] for d in feed_digests],
         ))
+        failed_sources = [d for d in feed_digests if d.get("status", "ok") != "ok"]
+        if failed_sources:
+            lines.append("")
+            lines.append(
+                f"**{len(failed_sources)} source(s) failed this run** "
+                f"({', '.join(d['source'] for d in failed_sources)}) — see the `status`/`error` "
+                "columns above. A failed source contributes zero rows to this run; it is not "
+                "treated as an empty-but-successful feed, and it does not prevent any other "
+                "source from being collected."
+            )
     else:
         lines.append("(no feed digests recorded yet)")
     lines.append("")

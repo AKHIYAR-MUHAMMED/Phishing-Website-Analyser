@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import config
+from crawler import fetcher as _fetcher
 from dataset import persistence, sources
 from dataset.domains import PSL_SOURCE
 from dataset.eligibility import row_intrinsic_ok
@@ -38,8 +39,18 @@ from dataset.link_discovery import find_login_link
 from dataset.manifest import append_capture_row, load_manifest
 from dataset.normalize import normalize_url
 from dataset.orchestrator import run_bulk_capture
+from dataset.redaction import redact_text, redact_url
 from dataset.sampling import sample_benign_ranks
 from dataset.selection import build_selection
+
+# One feed source's failure must never prevent the other independent sources from being
+# collected (a real PhishTank block, for example, must not also stop OpenPhish/Tranco). Every
+# source ends up with exactly one of these statuses, recorded in the run summary and dataset
+# card — never silently merged with "fetched zero rows" (a real empty-but-successful feed).
+FEED_STATUS_OK = "ok"
+FEED_STATUS_NETWORK_DISABLED = "network_disabled"
+FEED_STATUS_FETCH_ERROR = "fetch_error"
+FEED_STATUS_PARSE_ERROR = "parse_error"
 
 # section 10: a malformed feed line is recorded with a label where the source itself implies
 # one (both phishing feeds only ever list phishing URLs); a Tranco line has no label at all
@@ -107,6 +118,66 @@ def _dedupe_targets_by_normalized_url(targets: List[Dict[str, Any]]) -> List[Dic
         )
         result.append(entry)
     return result
+
+
+async def _fetch_and_parse_feed_source(fetch_fn, parse_fn):
+    """Runs one feed source's fetch step, then its parse step, both isolated from every OTHER
+    source: any exception here is caught and turned into a status record instead of propagating
+    out of run_collection() and aborting sources that would otherwise have succeeded (a single
+    real PhishTank block must not also prevent OpenPhish/Tranco from being collected).
+
+    Fetch and parse are deliberately two separate try blocks, not one: if the fetch succeeds but
+    parsing then fails, the already-fetched raw bytes must still be returned (and still get a
+    real digest computed over them — see run_collection()) rather than being lost along with the
+    parse exception. A single combined try/except would silently discard bytes that were, in
+    fact, successfully received.
+
+    `fetch_fn` is a zero-arg async callable returning raw bytes; `parse_fn` is a sync callable
+    taking those raw bytes and returning (rows, malformed). Returns
+    (raw_bytes_or_None, rows, malformed, status_dict). On any failure, rows and malformed are
+    both [] — a failed source contributes zero fabricated rows, and its row_count of 0 is never
+    confused with "fetched fine, feed just happened to be empty" because status_dict['status']
+    is never FEED_STATUS_OK in that case.
+
+    Status classification:
+      - FEED_STATUS_NETWORK_DISABLED: the test suite's (or any caller's) network guard blocked
+        the request outright — crawler.fetcher.NetworkBlockedError, the same exception/status
+        name already used elsewhere in this codebase for a blocked host (capture.py's
+        "network_disabled" crawl_status).
+      - FEED_STATUS_FETCH_ERROR: the fetch itself failed — HTTP error status, timeout,
+        connection error, too-many-redirects, DNS failure, etc. (dataset.feeds.fetch_feed_bytes
+        is documented to raise on any transport failure; this is exactly that raise, now caught
+        per-source instead of aborting the whole run).
+      - FEED_STATUS_PARSE_ERROR: the feed WAS fetched but its content could not be turned into
+        rows — currently only reachable via dataset.sources.TrancoFeedFormatError (the ZIP
+        archive didn't contain the expected member). PhishTank/OpenPhish's parsers are designed
+        to never raise (malformed lines are skipped and reported, not raised) so this path is
+        not currently reachable for them, but is handled generically all the same.
+    """
+    try:
+        raw_bytes = await fetch_fn()
+    except _fetcher.NetworkBlockedError as exc:
+        return None, [], [], {
+            "status": FEED_STATUS_NETWORK_DISABLED, "error_message": redact_text(str(exc)),
+        }
+    except Exception as exc:
+        # redact_text(): an exception's string form can embed the request URL (httpx's own
+        # error messages do), which can carry a real secret-shaped query parameter — section 18
+        # applies to this new error_message field exactly as it does to every other committed
+        # artifact, not just to endpoint URLs recorded the normal way.
+        return None, [], [], {
+            "status": FEED_STATUS_FETCH_ERROR,
+            "error_message": redact_text(f"{type(exc).__name__}: {exc}"),
+        }
+
+    try:
+        rows, malformed = parse_fn(raw_bytes)
+    except Exception as exc:
+        return raw_bytes, [], [], {
+            "status": FEED_STATUS_PARSE_ERROR,
+            "error_message": redact_text(f"{type(exc).__name__}: {exc}"),
+        }
+    return raw_bytes, rows, malformed, {"status": FEED_STATUS_OK, "error_message": ""}
 
 
 def _compute_feed_to_crawl_latency_seconds(row: Dict[str, Any]) -> str:
@@ -210,27 +281,56 @@ async def run_collection(
     )
     raw_feeds_dir = Path(raw_feeds_dir) if raw_feeds_dir else config.DATASET_RAW_FEEDS_DIR
 
-    # --- Fetch + parse the three feeds ---
-    phishtank_bytes = await fetch_feed_bytes(phishtank_endpoint)
-    openphish_bytes = await fetch_feed_bytes(openphish_endpoint)
-    tranco_bytes = await fetch_feed_bytes(tranco_endpoint)
+    # --- Fetch + parse the three feeds, each isolated from the others' failures ---
+    def _tranco_parse(raw: bytes):
+        # The real Tranco endpoint returns a ZIP archive (real-feed format probe, 2026-09-29);
+        # an unexpected archive raises TrancoFeedFormatError, caught by
+        # _fetch_and_parse_feed_source and classified as a parse failure — the raw response WAS
+        # fetched (and still gets a real digest), it just couldn't be turned into rows.
+        return sources.parse_tranco_feed(sources.unwrap_tranco_feed_bytes(raw))
 
-    phishtank_rows, phishtank_malformed = sources.parse_phishtank_feed(phishtank_bytes)
-    openphish_rows, openphish_malformed = sources.parse_openphish_feed(openphish_bytes)
-    # The real Tranco endpoint returns a ZIP archive (real-feed format probe, 2026-09-29); the
-    # digest below is still computed over the RAW response (tranco_bytes, unmodified) so it
-    # reflects exactly what the server returned, while parsing uses the unwrapped CSV.
-    tranco_csv_bytes = sources.unwrap_tranco_feed_bytes(tranco_bytes)
-    tranco_rows, tranco_malformed = sources.parse_tranco_feed(tranco_csv_bytes)
+    phishtank_bytes, phishtank_rows, phishtank_malformed, phishtank_status = (
+        await _fetch_and_parse_feed_source(
+            lambda: fetch_feed_bytes(phishtank_endpoint), sources.parse_phishtank_feed,
+        )
+    )
+    openphish_bytes, openphish_rows, openphish_malformed, openphish_status = (
+        await _fetch_and_parse_feed_source(
+            lambda: fetch_feed_bytes(openphish_endpoint), sources.parse_openphish_feed,
+        )
+    )
+    tranco_bytes, tranco_rows, tranco_malformed, tranco_status = (
+        await _fetch_and_parse_feed_source(
+            lambda: fetch_feed_bytes(tranco_endpoint), _tranco_parse,
+        )
+    )
+    feed_source_status = {
+        "phishtank": phishtank_status, "openphish": openphish_status, "tranco": tranco_status,
+    }
 
+    # A digest can only be computed over bytes that were actually received — a source that
+    # failed before any response arrived (raw_bytes is None) gets no digest entry at all; a
+    # source that fetched fine but failed to PARSE (raw_bytes present, e.g. Tranco's ZIP
+    # validation) still gets a real digest of what was actually received. Either way, a
+    # placeholder record is added for a failed source too, so dataset_card.py's sources table
+    # shows every source and its status rather than a failed source silently disappearing from
+    # the report (never conflated with "endpoint returned a valid, empty feed").
     feed_digests = []
-    for source_name, endpoint, raw_bytes, rows in (
-        ("phishtank", phishtank_endpoint, phishtank_bytes, phishtank_rows),
-        ("openphish", openphish_endpoint, openphish_bytes, openphish_rows),
-        ("tranco", tranco_endpoint, tranco_bytes, tranco_rows),
+    for source_name, endpoint, raw_bytes, rows, status in (
+        ("phishtank", phishtank_endpoint, phishtank_bytes, phishtank_rows, phishtank_status),
+        ("openphish", openphish_endpoint, openphish_bytes, openphish_rows, openphish_status),
+        ("tranco", tranco_endpoint, tranco_bytes, tranco_rows, tranco_status),
     ):
-        digest = compute_feed_digest(source_name, endpoint, raw_bytes, row_count=len(rows))
-        persistence.write_feed_digest(digest, source_name, run_date, feed_digests_dir)
+        if raw_bytes is not None:
+            digest = compute_feed_digest(source_name, endpoint, raw_bytes, row_count=len(rows))
+            persistence.write_feed_digest(digest, source_name, run_date, feed_digests_dir)
+        else:
+            digest = {
+                "source": source_name, "endpoint": redact_url(endpoint),
+                "timestamp": datetime.now(timezone.utc).isoformat(), "sha256": "", "row_count": 0,
+            }
+        digest["status"] = status["status"]
+        digest["error_message"] = status["error_message"]
         feed_digests.append(digest)
 
     # --- Build phishing targets (labeled 1) ---
@@ -352,6 +452,7 @@ async def run_collection(
             "openphish": len(openphish_malformed),
             "tranco": len(tranco_malformed),
         },
+        "feed_source_status": feed_source_status,
         "feed_digests": feed_digests,
         "backup_listing_path": str(backup_listing_path),
         "backup_archive_off_machine_confirmed": False,  # manual step, section 21.2 — never asserted true by code

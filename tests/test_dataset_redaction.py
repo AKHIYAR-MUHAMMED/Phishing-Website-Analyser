@@ -1,4 +1,4 @@
-from dataset.redaction import REDACTED_PLACEHOLDER, contains_secret, redact_url, scan_text_for_secrets
+from dataset.redaction import REDACTED_PLACEHOLDER, contains_secret, redact_text, redact_url, scan_text_for_secrets
 
 
 def test_redact_url_masks_app_key():
@@ -31,6 +31,22 @@ def test_scan_text_for_secrets_clean_text():
 def test_empty_input():
     assert redact_url("") == ""
     assert scan_text_for_secrets("") == []
+
+
+def test_redact_text_masks_a_secret_embedded_in_a_sentence():
+    """A feed-fetch exception's string form can embed the request URL (httpx does this), which
+    can carry a real secret-shaped query parameter — this is not always a well-formed URL by
+    itself, so redact_url() alone (query-string-only) isn't enough."""
+    message = "Client error '403 Forbidden' for url 'http://x?app_key=SuperSecretValue123456'"
+    redacted = redact_text(message)
+    assert "SuperSecretValue123456" not in redacted
+    assert "app_key=REDACTED" in redacted
+    assert scan_text_for_secrets(redacted) == []
+
+
+def test_redact_text_leaves_clean_text_alone():
+    assert redact_text("HTTPStatusError: 403 Forbidden") == "HTTPStatusError: 403 Forbidden"
+    assert redact_text("") == ""
 
 
 def test_scanner_does_not_flag_its_own_redaction_placeholder():

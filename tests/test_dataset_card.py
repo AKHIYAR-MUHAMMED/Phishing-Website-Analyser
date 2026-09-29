@@ -91,3 +91,34 @@ def test_generate_card_notes_backup_is_a_manual_check():
     card = generate_card(MANIFEST_ROWS, SELECTION_ROWS, "v1")
     assert "MANUAL" in card
     assert "Not verifiable by this generator" in card
+
+
+def test_generate_card_reports_a_failed_source_explicitly():
+    digests = [
+        {"source": "phishtank", "status": "fetch_error", "error_message": "HTTPStatusError: 403 Forbidden",
+         "endpoint": "http://data.phishtank.com/data/online-valid.csv", "timestamp": "t", "sha256": "", "row_count": 0},
+        {"source": "openphish", "status": "ok", "error_message": "",
+         "endpoint": "https://openphish.com/feed.txt", "timestamp": "t", "sha256": "h2", "row_count": 300},
+    ]
+    card = generate_card(MANIFEST_ROWS, SELECTION_ROWS, "v1", feed_digests=digests)
+    assert "fetch_error" in card
+    assert "403 Forbidden" in card
+    assert "1 source(s) failed this run" in card
+    assert "phishtank" in card
+
+
+def test_generate_card_omits_the_failed_source_note_when_everything_succeeded():
+    digests = [
+        {"source": "phishtank", "status": "ok", "error_message": "",
+         "endpoint": "http://x", "timestamp": "t", "sha256": "h", "row_count": 1},
+    ]
+    card = generate_card(MANIFEST_ROWS, SELECTION_ROWS, "v1", feed_digests=digests)
+    assert "source(s) failed this run" not in card
+
+
+def test_generate_card_defaults_status_to_ok_for_a_digest_without_a_status_field():
+    """Backward compatibility: a digest produced the old way (compute_feed_digest's original
+    shape, no "status" key at all) must still render as "ok", not blank or crash."""
+    digests = [{"source": "tranco", "endpoint": "http://x", "timestamp": "t", "sha256": "h", "row_count": 5}]
+    card = generate_card(MANIFEST_ROWS, SELECTION_ROWS, "v1", feed_digests=digests)
+    assert "source(s) failed this run" not in card

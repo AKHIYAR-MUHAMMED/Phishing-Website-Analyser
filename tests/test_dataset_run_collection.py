@@ -10,6 +10,7 @@ import asyncio
 import io
 import json
 import zipfile
+from pathlib import Path
 
 from dataset.manifest import load_manifest
 from dataset.persistence import read_used_tranco_ranks
@@ -360,3 +361,288 @@ def test_run_collection_handles_a_zip_wrapped_tranco_feed(tmp_path, http_server)
     tranco_digest = next(d for d in result["summary"]["feed_digests"] if d["source"] == "tranco")
     import hashlib
     assert tranco_digest["sha256"] == hashlib.sha256(tranco_zip_body).hexdigest()
+
+
+# --- Feed-source isolation (one source's failure must not prevent the others from running) ---
+#
+# Triggered for real by the small controlled pilot: PhishTank returning a real HTTP 403 aborted
+# the entire run before OpenPhish or Tranco were ever fetched. These tests reproduce that failure
+# mode locally (a 404 from the fixture feed server stands in for "fetch failed"; a corrupt ZIP
+# body stands in for "fetched fine, failed to parse"; a non-local endpoint exercises the network
+# guard) and assert every other source still completes normally.
+
+def test_run_collection_all_three_sources_succeed_status_is_ok_for_each(tmp_path, http_server):
+    feed_server = _build_feed_server(http_server)
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+    assert result["summary"]["feed_source_status"] == {
+        "phishtank": {"status": "ok", "error_message": ""},
+        "openphish": {"status": "ok", "error_message": ""},
+        "tranco": {"status": "ok", "error_message": ""},
+    }
+    assert all(d["status"] == "ok" for d in result["summary"]["feed_digests"])
+
+
+def test_run_collection_phishtank_fetch_failure_does_not_block_openphish_or_tranco(tmp_path, http_server):
+    """Reproduces the real pilot failure locally: PhishTank returning a non-2xx response (here,
+    a 404 from the fixture server — the real run hit a 403) must not prevent OpenPhish and
+    Tranco from being fetched and processed."""
+    feed_server = _build_feed_server(http_server)
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/does-not-exist.csv"),  # 404 from FeedTestServer
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0, benign_target_count=2,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    status = result["summary"]["feed_source_status"]
+    assert status["phishtank"]["status"] == "fetch_error"
+    assert status["phishtank"]["error_message"]  # non-empty, real diagnostic text
+    assert status["openphish"]["status"] == "ok"
+    assert status["tranco"]["status"] == "ok"
+
+    # OpenPhish and Tranco actually completed the normal pipeline: OpenPhish's URL was crawled,
+    # Tranco's ranks were sampled.
+    assert result["summary"]["by_crawl_status"].get("ok", 0) >= 1
+    assert result["summary"]["ranks_sampled"] == [1, 2]
+
+    # No fabricated PhishTank rows: zero phishing targets came from the failed source, and no
+    # manifest row anywhere claims a phishtank origin.
+    manifest_rows = load_manifest(tmp_path / "manifest.csv")
+    assert all("phishtank" not in str(r.get("source", "")) for r in manifest_rows)
+    assert result["summary"]["malformed_feed_lines"]["phishtank"] == 0
+
+
+def test_run_collection_openphish_fetch_failure_does_not_block_phishtank_or_tranco(tmp_path, http_server):
+    feed_server = _build_feed_server(http_server)
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/does-not-exist.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0, benign_target_count=2,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    status = result["summary"]["feed_source_status"]
+    assert status["openphish"]["status"] == "fetch_error"
+    assert status["phishtank"]["status"] == "ok"
+    assert status["tranco"]["status"] == "ok"
+    assert result["summary"]["ranks_sampled"] == [1, 2]
+    manifest_rows = load_manifest(tmp_path / "manifest.csv")
+    assert all("openphish" not in str(r.get("source", "")) for r in manifest_rows)
+
+
+def test_run_collection_tranco_fetch_failure_does_not_block_phishtank_or_openphish(tmp_path, http_server):
+    feed_server = _build_feed_server(http_server)
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/does-not-exist.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    status = result["summary"]["feed_source_status"]
+    assert status["tranco"]["status"] == "fetch_error"
+    assert status["phishtank"]["status"] == "ok"
+    assert status["openphish"]["status"] == "ok"
+    # Tranco contributed zero ranks (nothing to sample from) but did not crash the run.
+    assert result["summary"]["ranks_sampled"] == []
+    assert result["summary"]["benign_homepage_targets"] == 0
+    assert result["summary"]["by_crawl_status"].get("ok", 0) >= 2  # phishtank + openphish targets
+    manifest_rows = load_manifest(tmp_path / "manifest.csv")
+    assert all("tranco" not in str(r.get("source", "")) for r in manifest_rows)
+
+
+def test_run_collection_tranco_parse_failure_is_isolated_like_a_fetch_failure(tmp_path, http_server):
+    """A source can fail AFTER a successful fetch too (Tranco's real ZIP-validation path) — this
+    must be isolated exactly the same way as a fetch-layer failure, not treated differently."""
+    corrupt_zip = b"PK\x03\x04" + b"this is not a valid zip body"
+    feed_server = _build_feed_server(http_server, tranco_body=corrupt_zip)
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    status = result["summary"]["feed_source_status"]
+    assert status["tranco"]["status"] == "parse_error"
+    assert status["tranco"]["error_message"]
+    assert status["phishtank"]["status"] == "ok"
+    assert status["openphish"]["status"] == "ok"
+    assert result["summary"]["ranks_sampled"] == []
+
+    # The raw (corrupt) bytes WERE received, so a real digest is still computed over them —
+    # distinguishes "fetched fine, couldn't parse" from "never got a response at all".
+    tranco_digest = next(d for d in result["summary"]["feed_digests"] if d["source"] == "tranco")
+    import hashlib
+    assert tranco_digest["sha256"] == hashlib.sha256(corrupt_zip).hexdigest()
+    assert tranco_digest["status"] == "parse_error"
+
+
+def test_run_collection_network_guard_still_applies_to_an_individual_feed_source(tmp_path, http_server):
+    """The autouse block_real_network fixture (conftest.py) must still block a non-local feed
+    endpoint exactly as before — feed-source isolation must not weaken or bypass it."""
+    feed_server = _build_feed_server(http_server)
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint="https://blocked-host.example/online-valid.csv",
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    status = result["summary"]["feed_source_status"]
+    assert status["phishtank"]["status"] == "network_disabled"
+    assert status["openphish"]["status"] == "ok"
+    assert status["tranco"]["status"] == "ok"
+
+
+def test_run_collection_survives_all_three_sources_failing_at_once(tmp_path, http_server):
+    """Freebuff review follow-up: per-source isolation is safe by inspection even when EVERY
+    source fails in the same run (not just one) — the whole pipeline (targets, orchestrator,
+    manifest append, selection/split build, card/run-summary generation) must complete cleanly
+    on a fully empty target pool, not just tolerate one failure at a time."""
+    feed_server = FeedTestServer({}).start()  # every path 404s: all three feeds fail to fetch
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/phishtank.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+
+    status = result["summary"]["feed_source_status"]
+    assert status["phishtank"]["status"] == "fetch_error"
+    assert status["openphish"]["status"] == "fetch_error"
+    assert status["tranco"]["status"] == "fetch_error"
+    assert all(d["status"] != "ok" for d in result["summary"]["feed_digests"])
+
+    # Zero fabricated rows of either label.
+    assert result["summary"]["phishing_targets"] == 0
+    assert result["summary"]["benign_homepage_targets"] == 0
+    assert result["summary"]["benign_second_page_targets"] == 0
+    assert result["summary"]["targets_attempted"] == 0
+    assert result["summary"]["ranks_sampled"] == []
+    assert result["summary"]["by_crawl_status"] == {}
+
+    # Nothing crashed downstream on the empty pool: manifest is empty (no attempts to record),
+    # selection/split build produced an empty-but-valid result, and every committed artifact
+    # was still written.
+    manifest_rows = load_manifest(tmp_path / "manifest.csv")
+    assert manifest_rows == []
+    assert result["selection_rows"] == []
+    for split_path in result["split_paths"].values():
+        assert Path(split_path).read_text(encoding="utf-8") == ""
+
+    card_text = Path(result["card_path"]).read_text(encoding="utf-8")
+    assert "Total capture attempts: 0" in card_text
+    assert "3 source(s) failed this run" in card_text
+    from dataset.redaction import scan_text_for_secrets
+    assert scan_text_for_secrets(card_text) == []
+
+    run_summary = json.loads(Path(result["run_summary_path"]).read_text(encoding="utf-8"))
+    assert run_summary["targets_attempted"] == 0
+
+
+def test_run_collection_redacts_a_secret_embedded_in_a_fetch_error_message(tmp_path, http_server):
+    """A fetch failure's exception text can embed the request URL (httpx's own error strings do)
+    — if that URL carried a real app_key, the raw key must never reach the run summary or
+    dataset card via error_message."""
+    feed_server = _build_feed_server(http_server)
+    try:
+        result = asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/does-not-exist.csv?app_key=SuperSecretValue123456"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+    error_message = result["summary"]["feed_source_status"]["phishtank"]["error_message"]
+    assert "SuperSecretValue123456" not in error_message
+    card_text = (tmp_path / "DATASET_CARD.md").read_text(encoding="utf-8")
+    assert "SuperSecretValue123456" not in card_text
+
+
+def test_run_collection_feed_source_status_appears_in_the_dataset_card(tmp_path, http_server):
+    """Section 14 item 2: a failed source must be visible in the generated card, not silently
+    absent from it."""
+    feed_server = _build_feed_server(http_server)
+    try:
+        asyncio.run(run_collection(
+            run_date="2026-01-01", version="v1",
+            phishtank_endpoint=feed_server.url("/does-not-exist.csv"),
+            openphish_endpoint=feed_server.url("/openphish.txt"),
+            tranco_endpoint=feed_server.url("/tranco.csv"),
+            tranco_list_id="test-list", seed=1, host_delay_seconds=0.0,
+            **_paths(tmp_path),
+        ))
+    finally:
+        feed_server.stop()
+    card_text = (tmp_path / "DATASET_CARD.md").read_text(encoding="utf-8")
+    assert "fetch_error" in card_text
+    assert "source(s) failed this run" in card_text
+    assert "phishtank" in card_text
+
+
+def test_run_collection_isolation_is_deterministic_across_repeated_runs(tmp_path, http_server):
+    """Section 21.1 item 1's reproducibility guarantee must hold even when one source
+    consistently fails: the successful sources' results must be identical run to run."""
+    feed_server = _build_feed_server(http_server)
+    try:
+        results = []
+        for i, run_date in enumerate(("2026-01-01", "2026-01-02")):
+            results.append(asyncio.run(run_collection(
+                run_date=run_date, version="v1",
+                phishtank_endpoint=feed_server.url("/does-not-exist.csv"),
+                openphish_endpoint=feed_server.url("/openphish.txt"),
+                tranco_endpoint=feed_server.url("/tranco.csv"),
+                tranco_list_id="test-list", seed=1, host_delay_seconds=0.0, benign_target_count=1,
+                **_paths(tmp_path / f"run{i}"),
+            )))
+    finally:
+        feed_server.stop()
+
+    assert results[0]["summary"]["feed_source_status"]["phishtank"]["status"] == "fetch_error"
+    assert results[1]["summary"]["feed_source_status"]["phishtank"]["status"] == "fetch_error"
+    assert results[0]["summary"]["ranks_sampled"] == results[1]["summary"]["ranks_sampled"]
+    assert results[0]["summary"]["by_crawl_status"] == results[1]["summary"]["by_crawl_status"]
