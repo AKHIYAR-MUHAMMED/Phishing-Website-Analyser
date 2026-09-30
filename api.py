@@ -101,6 +101,15 @@ async def serve_dashboard():
     return HTMLResponse(content="<h1>PhishGuard API</h1><p>See <a href='/docs'>/docs</a>.</p>")
 
 
+@app.get("/demo", response_class=HTMLResponse)
+async def serve_honest_demo():
+    """The new, honest demo dashboard (calls /api/v2/analyze only) — separate from the legacy
+    dashboard at "/", which is being replaced (see README's rebuild notice)."""
+    demo_path = os.path.join(DASHBOARD_DIR, "demo.html")
+    with open(demo_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
 # --- Scan pipeline ---
 
 @app.post("/api/v1/scan")
@@ -266,3 +275,18 @@ async def health_check():
 @app.post("/api/v1/auth/login")
 async def login_user(req: LoginRequest):
     return not_available("auth")
+
+
+# --- Demo pipeline (project review): real crawl -> real features -> real DOM graph ->
+# real GNN forward pass (retrained on the actual small Phase 3 dataset, not the synthetic
+# template) -> disclosed rule-based semantic heuristic (no LLM key configured) -> honest
+# fusion. See analysis_pipeline.py for the full chain and its disclosed limitations. ---
+
+class AnalyzeRequest(BaseModel):
+    url: str
+
+
+@app.post("/api/v2/analyze")
+async def analyze_url_endpoint(req: AnalyzeRequest):
+    from analysis_pipeline import analyze_url
+    return await analyze_url(req.url)

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PhishGuard AI — Honest Demo Pipeline</title>
+<style>
+  :root { --bg:#0f1420; --panel:#161d2e; --border:#28324a; --text:#e6e9f0; --muted:#94a1bd;
+          --phish:#e5484d; --benign:#30a46c; --accent:#5b8def; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: -apple-system, Segoe UI, Roboto, sans-serif; overflow-x:hidden; }
+  header { padding: 24px 32px; border-bottom: 1px solid var(--border); }
+  header h1 { margin:0; font-size: 20px; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 32px 60px; }
+  .scan-form { display:flex; flex-wrap: wrap; gap:8px; margin-bottom: 24px; }
+  .scan-form input { flex:1 1 220px; min-width:0; padding: 12px 14px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px; }
+  .scan-form button { flex: 0 0 auto; padding: 12px 22px; border-radius:8px; border:none; background:var(--accent); color:white; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .scan-form button:disabled { opacity:0.5; cursor:default; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; }
+  .card h2 { margin:0 0 12px; font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; }
+  .verdict { display:flex; align-items:center; gap:14px; }
+  .verdict-badge { font-size:22px; font-weight:800; padding:8px 18px; border-radius:8px; }
+  .verdict-badge.phishing { background: rgba(229,72,77,0.15); color: var(--phish); }
+  .verdict-badge.benign { background: rgba(48,166,108,0.15); color: var(--benign); }
+  .verdict-badge.unavailable { background: rgba(148,161,189,0.15); color: var(--muted); }
+  .score { font-family: monospace; color: var(--muted); }
+  .caveat { font-size:12px; color:var(--muted); margin-top:10px; line-height:1.5; }
+  .component { border-top: 1px solid var(--border); padding-top:12px; margin-top:12px; }
+  .component:first-child { border-top:none; padding-top:0; margin-top:0; }
+  .component-row { display:flex; justify-content:space-between; align-items:baseline; }
+  .component-name { font-weight:600; }
+  .status-tag { font-size:11px; padding:2px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:0.04em; }
+  .status-tag.ok, .status-tag.real_small_sample_model, .status-tag.heuristic { background:rgba(91,141,239,0.18); color:var(--accent); }
+  .status-tag.unavailable { background:rgba(148,161,189,0.15); color:var(--muted); }
+  .note { font-size:12px; color:var(--muted); margin-top:6px; }
+  .evidence { font-size:12px; color:var(--muted); margin-top:8px; }
+  .evidence code { background:#0c1220; padding:1px 5px; border-radius:4px; color:#c9d4ee; }
+  pre { background:#0c1220; padding:12px; border-radius:8px; overflow-x:auto; font-size:11px; color:#aab6d6; }
+  .muted { color:var(--muted); }
+  #error { color: var(--phish); margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PhishGuard AI — Honest Demo Pipeline</h1>
+  <p>Real crawl → real URL/DOM features → real GNN forward pass (small real dataset) → disclosed heuristic → transparent fusion. No fabricated scores.</p>
+</header>
+<main>
+  <div class="scan-form">
+    <input id="url-input" type="text" placeholder="https://example.com" value="https://github.com" />
+    <button id="scan-btn" onclick="runScan()">Analyze</button>
+  </div>
+  <div id="error"></div>
+  <div id="results"></div>
+</main>
+<script>
+async function runScan() {
+  const url = document.getElementById('url-input').value.trim();
+  const btn = document.getElementById('scan-btn');
+  const errorEl = document.getElementById('error');
+  const resultsEl = document.getElementById('results');
+  errorEl.textContent = '';
+  resultsEl.innerHTML = '<p class="muted">Running real pipeline…</p>';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/v2/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url})
+    });
+    if (!res.ok) throw new Error('Request failed: ' + res.status);
+    const data = await res.json();
+    render(data);
+  } catch (e) {
+    errorEl.textContent = 'Error: ' + e.message;
+    resultsEl.innerHTML = '';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function statusTag(status) {
+  return `<span class="status-tag ${status}">${status.replace(/_/g,' ')}</span>`;
+}
+
+function render(data) {
+  const el = document.getElementById('results');
+  let html = '';
+
+  const verdict = data.verdict || 'unavailable';
+  const fused = data.fusion ? data.fusion.fused_score : null;
+  html += `<div class="card"><h2>Verdict</h2><div class="verdict">
+    <span class="verdict-badge ${verdict}">${verdict.toUpperCase()}</span>
+    ${fused !== null ? `<span class="score">fused score: ${fused.toFixed(4)}</span>` : ''}
+  </div>`;
+  if (data.verdict_reason) html += `<div class="note">${data.verdict_reason}</div>`;
+  if (data.verdict_confidence_caveat) html += `<div class="caveat">${data.verdict_confidence_caveat}</div>`;
+  html += `</div>`;
+
+  html += `<div class="card"><h2>Crawl</h2>
+    <div>final URL: <code>${data.crawl?.final_url || data.url}</code></div>
+    <div>HTTP status: ${data.crawl?.http_status ?? 'n/a'} &nbsp; status: ${statusTag(data.crawl?.status || 'unavailable')}</div>
+    ${data.crawl?.error_message ? `<div class="note">${data.crawl.error_message}</div>` : ''}
+    <div class="note">elapsed: ${data.elapsed_ms_total} ms (measured, not fabricated)</div>
+  </div>`;
+
+  if (data.components) {
+    html += `<div class="card"><h2>Component signals (real evidence)</h2>`;
+
+    const gnn = data.components.gnn;
+    if (gnn) {
+      html += `<div class="component"><div class="component-row"><span class="component-name">GNN — DOM graph structure</span>${statusTag(gnn.status)}</div>`;
+      if (gnn.threat_score !== undefined) html += `<div>threat score: <span class="score">${gnn.threat_score}</span></div>`;
+      if (gnn.graph_stats) html += `<div class="evidence">nodes: <code>${gnn.graph_stats.node_count}</code> edges: <code>${gnn.graph_stats.edge_count}</code> density: <code>${gnn.graph_stats.graph_density.toFixed(4)}</code></div>`;
+      if (gnn.note) html += `<div class="note">${gnn.note}</div>`;
+      html += `</div>`;
+    }
+
+    const sem = data.components.semantic;
+    if (sem) {
+      html += `<div class="component"><div class="component-row"><span class="component-name">Semantic — page text</span>${statusTag(sem.status)}</div>`;
+      html += `<div>score: <span class="score">${sem.score}</span></div>`;
+      if (sem.evidence) {
+        html += `<div class="evidence">credential terms: <code>${(sem.evidence.credential_related_terms_found||[]).join(', ') || 'none'}</code></div>`;
+        html += `<div class="evidence">urgency terms: <code>${(sem.evidence.urgency_terms_found||[]).join(', ') || 'none'}</code></div>`;
+        html += `<div class="evidence">brand terms: <code>${(sem.evidence.brand_terms_found||[]).join(', ') || 'none'}</code></div>`;
+      }
+      if (sem.note) html += `<div class="note">${sem.note}</div>`;
+      html += `</div>`;
+    }
+
+    const lex = data.components.url_lexical;
+    if (lex) {
+      html += `<div class="component"><div class="component-row"><span class="component-name">URL lexical features</span>${statusTag(lex.status)}</div>`;
+      html += `<div>signal score: <span class="score">${lex.signal.score}</span></div>`;
+      html += `<div class="evidence">flagged: <code>${Object.keys(lex.signal.flagged_features).join(', ') || 'none'}</code></div>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  if (data.fusion) {
+    html += `<div class="card"><h2>Fusion</h2>
+      <div>contributing components: <code>${data.fusion.contributing_components.join(', ')}</code></div>
+      <pre>${JSON.stringify(data.fusion.component_scores, null, 2)}</pre>
+      <div class="note">${data.fusion.method}</div>
+    </div>`;
+  }
+
+  html += `<div class="card"><h2>Raw response</h2><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+  el.innerHTML = html;
+}
+
+document.getElementById('url-input').addEventListener('keydown', e => { if (e.key === 'Enter') runScan(); });
+</script>
+</body>
+</html>
