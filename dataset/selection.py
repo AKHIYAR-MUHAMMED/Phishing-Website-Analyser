@@ -22,16 +22,17 @@ ineligible in a later version, while dataset_card.py's own counts filter to elig
 
 import random
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
 import config
-from dataset.eligibility import full_eligible, row_intrinsic_ok
+from dataset.eligibility import full_eligible, row_intrinsic_ok, snapshot_integrity_ok
 
 SELECTION_COLUMNS = [
     "normalized_url", "dataset_version", "source_collection_run_date", "registered_domain_used",
     "label", "eligible", "duplicate_of_normalized_url", "duplicate_basis",
-    "cross_label_duplicate", "label_conflict", "domain_redirect_mismatch", "split",
-    "split_frozen_at_version",
+    "cross_label_duplicate", "label_conflict", "domain_redirect_mismatch",
+    "snapshot_integrity_failed", "split", "split_frozen_at_version",
 ]
 
 SPLIT_TARGETS = {"train": 0.6, "val": 0.2, "test": 0.2}
@@ -161,6 +162,7 @@ def build_selection(
     previous_selection_rows: Optional[List[Dict[str, Any]]],
     version: str,
     seed: Optional[int] = None,
+    raw_html_dir: Union[str, Path, None] = None,
 ) -> List[Dict[str, Any]]:
     """
     Builds one dataset version's derived selection artifact from the full manifest.
@@ -182,6 +184,17 @@ def build_selection(
     specific domain lands in which split among near-ties is reproducible-given-seed rather than
     a fixed artifact of alphabetical domain names (the bias an earlier revision had, per the I3
     finding this revision fixes).
+
+    raw_html_dir, if given, re-verifies every row_intrinsic-ok row's snapshot file against disk
+    (exists, content hash still matches the manifest's recorded html_sha256) every time selection
+    is rebuilt — not just for rows captured in the current run. A real pilot run surfaced exactly
+    the gap this closes: a row's manifest fields alone (html_snapshot_path non-empty) said the
+    snapshot was fine, but the file had been lost since the run that captured it, and nothing
+    re-checked older rows carried forward into a later version's splits. A failing row is marked
+    `snapshot_integrity_failed` and excluded from `eligible`, same shape as domain_redirect_
+    mismatch, rather than mutating the immutable manifest's own crawl_status. When raw_html_dir
+    is omitted (e.g. existing unit tests with no real snapshot files on disk), the check is
+    skipped and every row's snapshot_integrity_failed is False, preserving prior behaviour.
     """
     latest = _latest_ok_row_per_url(manifest_rows)
     prepped: Dict[str, Dict[str, Any]] = {}
@@ -202,13 +215,16 @@ def build_selection(
     selection_by_url: Dict[str, Dict[str, Any]] = {}
     for url, row in prepped.items():
         intrinsic = row_intrinsic_ok(row)
+        snapshot_failed = (
+            intrinsic and raw_html_dir is not None and not snapshot_integrity_ok(row, raw_html_dir)
+        )
         mismatch = bool(row.get("domain_redirect_mismatch"))
         dup_entry = duplicate_map.get(url)
         cross_label = url in cross_label_urls
         domain = row["registered_domain_used"]
         label_conflict = (not mismatch) and domain in conflicted_domains
         is_duplicate = (dup_entry is not None) or cross_label
-        eligible = full_eligible(intrinsic, is_duplicate, label_conflict, mismatch)
+        eligible = full_eligible(intrinsic, is_duplicate, label_conflict, mismatch, snapshot_failed)
         try:
             label_value = int(row.get("label"))
         except (TypeError, ValueError):
@@ -225,6 +241,7 @@ def build_selection(
             "cross_label_duplicate": cross_label,
             "label_conflict": label_conflict,
             "domain_redirect_mismatch": mismatch,
+            "snapshot_integrity_failed": snapshot_failed,
             "split": "",
             "split_frozen_at_version": "",
         }
