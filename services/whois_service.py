@@ -1,12 +1,15 @@
 """
-WHOIS Registration & Domain Intelligence Service.
+WHOIS registration service.
+
+Disabled in the Phase 0 honesty pass: the previous outputs were fabricated from URL keywords.
 """
 
-from typing import Dict, Any
-from collectors import WHOISDNSCollector
+from typing import Any, Dict
+
+from component_status import unavailable
 
 
 class WHOISService:
     @staticmethod
     def analyze(url: str) -> Dict[str, Any]:
-        return WHOISDNSCollector.collect(url)
+        return unavailable("whois_dns")

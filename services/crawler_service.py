@@ -1,30 +1,21 @@
 """
-Crawler & Ingestion Service:
-Fetches HTML DOM, inline scripts, CSS styles, and HTTP response headers.
+Crawler & ingestion service.
+
+Fetches HTML live when the request supplies none (crawler/fetcher.py: timeout, redirect and
+size limits, explicit failure states). If the request supplies HTML directly, that HTML is
+used unchanged and no network request is made.
 """
 
-import urllib.parse
-from typing import Dict, Any
+from typing import Any, Dict
+
+from multimodal_fusion import describe_crawl
 
 
 class CrawlerService:
     @staticmethod
-    def crawl(url: str, html_payload: str = "") -> Dict[str, Any]:
-        parsed = urllib.parse.urlparse(url if "://" in url else "http://" + url)
-        domain = parsed.netloc or parsed.path
-        
-        # Generated or provided DOM payload
-        dom_html = html_payload if html_payload else f"<html><head><title>{domain}</title></head><body><h1>Welcome to {domain}</h1></body></html>"
-        
-        return {
-            "url": url,
-            "domain": domain,
-            "scheme": parsed.scheme or "http",
-            "html_length_bytes": len(dom_html),
-            "html_content": dom_html,
-            "headers": {
-                "server": "nginx/1.18.0",
-                "content-type": "text/html; charset=UTF-8",
-                "x-frame-options": "SAMEORIGIN"
-            }
-        }
+    async def crawl(url: str, html_payload: str = "") -> Dict[str, Any]:
+        crawl_status, effective_html = await describe_crawl(url, html_payload)
+        result = dict(crawl_status)
+        result["url"] = url
+        result["html_content"] = effective_html
+        return result

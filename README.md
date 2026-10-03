@@ -6,6 +6,12 @@
 [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
+> **Project status (rebuild in progress).** This README describes components that were found to be
+> simulated in a code audit (see `CLAUDE.md`). On the `phishguard-rebuild` branch, those components
+> are disabled and report an explicit `unavailable` status. No model is trained or evaluated yet,
+> so no accuracy or other metric is claimed, and scans return no verdict. A full README rewrite
+> is planned once the rebuilt pipeline works.
+
 **PhishGuard-X** is an enterprise-grade, state-of-the-art **Multimodal AI Phishing Detection & Threat Intelligence Platform**. By unifying structural graph neural networks, vision transformers, sequence language models, a 10-LLM Bayesian consensus orchestrator, and deep explainability (XAI), PhishGuard-X provides real-time detection of zero-day phishing websites, brand impersonation attacks, and malicious DOM structures.
 
 ---
