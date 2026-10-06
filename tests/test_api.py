@@ -9,12 +9,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api import app
-from component_status import AVAILABLE, HEURISTIC, NOT_EVALUATED, NOT_IMPLEMENTED, UNAVAILABLE
+from component_status import (
+    AVAILABLE, HEURISTIC, EXPERIMENTAL, NOT_CONFIGURED, NOT_EVALUATED, NOT_IMPLEMENTED, UNAVAILABLE,
+)
 from multimodal_fusion import DISABLED_MODALITIES
 
 client = TestClient(app)
 
-ALLOWED_STATUSES = {AVAILABLE, HEURISTIC, UNAVAILABLE, NOT_IMPLEMENTED, NOT_EVALUATED}
+ALLOWED_STATUSES = {
+    AVAILABLE, HEURISTIC, EXPERIMENTAL, NOT_CONFIGURED, UNAVAILABLE, NOT_IMPLEMENTED, NOT_EVALUATED,
+}
 
 LOGIN_PAGE = (
     "<html><head><title>Sign in</title></head><body>"

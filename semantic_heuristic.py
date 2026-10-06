@@ -25,14 +25,28 @@ _BRAND_TERMS = (
 )
 
 
+def _find_terms(text: str, terms) -> list:
+    """Word-boundary matching, not a raw substring search. GNN reliability repair, Bug B: a
+    plain `term in text` check matched "chase" inside "purchase" -- apple.com's real page text
+    legitimately contains "purchase" and got a false "chase" (Chase bank) brand-term hit with
+    no relation to the actual word. `\\b...\\b` requires a real word boundary on both sides, so
+    it still matches "chase" as its own word (or the start of a real multi-word phrase like
+    "sign in") but not as a substring of an unrelated longer word."""
+    hits = []
+    for term in terms:
+        if re.search(r"\b" + re.escape(term) + r"\b", text):
+            hits.append(term)
+    return sorted(set(hits))
+
+
 def analyze_text_heuristically(title: str, visible_text: str) -> Dict[str, Any]:
     """Real, deterministic keyword scan over real page text. Returns a 0..1 score and the exact
     matched terms (evidence), never a fabricated confidence."""
     text = f"{title or ''} {visible_text or ''}".lower()
 
-    credential_hits = sorted({t for t in _CREDENTIAL_TERMS if t in text})
-    urgency_hits = sorted({t for t in _URGENCY_TERMS if t in text})
-    brand_hits = sorted({t for t in _BRAND_TERMS if t in text})
+    credential_hits = _find_terms(text, _CREDENTIAL_TERMS)
+    urgency_hits = _find_terms(text, _URGENCY_TERMS)
+    brand_hits = _find_terms(text, _BRAND_TERMS)
     has_form_language = bool(re.search(r"\b(sign in|log ?in|register|verify)\b", text))
 
     raw_score = (

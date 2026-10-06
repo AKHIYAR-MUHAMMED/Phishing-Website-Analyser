@@ -7,17 +7,19 @@
  * - Components that are not available are shown with their status and reason.
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initNavigation();
     initScanForm();
-    loadComponentStatus();
-    loadEvaluationStatus();
+    const [components, evalByLabel] = await Promise.all([loadComponentStatus(), loadEvaluationStatus()]);
+    renderImplementationOverview(components, evalByLabel);
 });
 
 const STATUS_BADGE = {
     available: 'badge-success',
     ok: 'badge-success',
     heuristic: 'badge-warning',
+    experimental: 'badge-experimental',
+    not_configured: 'badge-not-configured',
     not_evaluated: 'badge-muted',
     unavailable: 'badge-muted',
     not_implemented: 'badge-muted',
@@ -61,7 +63,7 @@ async function fetchJson(url, options) {
 
 // --- Tab navigation ---
 function initNavigation() {
-    const headings = { 'scanner-tab': 'Scanner', 'status-tab': 'Component Status', 'evaluation-tab': 'Evaluation & Data' };
+    const headings = { 'scanner-tab': 'Scanner', 'status-tab': 'Current Implementation & Roadmap' };
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
@@ -184,8 +186,10 @@ async function loadComponentStatus() {
         const data = await fetchJson('/dashboard/system');
         tbody.innerHTML = data.components.map(c => `
             <tr><td><strong>${escapeHtml(c.name)}</strong></td><td>${statusBadge(c.status)}</td><td>${escapeHtml(c.reason)}</td></tr>`).join('');
+        return data.components;
     } catch (err) {
         tbody.innerHTML = `<tr><td colspan="3">Could not load component status (${escapeHtml(err.message)}).</td></tr>`;
+        return [];
     }
 }
 
@@ -198,13 +202,75 @@ async function loadEvaluationStatus() {
         ['Scan history', '/dashboard/history'],
     ];
     const rows = [];
+    const byLabel = {};
     for (const [label, url] of items) {
         try {
             const data = await fetchJson(url);
+            byLabel[label] = data;
             rows.push(`<tr><td><strong>${escapeHtml(label)}</strong></td><td>${statusBadge(data.status)}</td><td>${escapeHtml(data.reason || '')}</td></tr>`);
         } catch (err) {
             rows.push(`<tr><td><strong>${escapeHtml(label)}</strong></td><td>${statusBadge('error')}</td><td>${escapeHtml(err.message)}</td></tr>`);
         }
     }
     tbody.innerHTML = rows.join('');
+    return byLabel;
+}
+
+// --- Grouped "Current Implementation & Roadmap" view ---
+// Presentation-only: re-groups the SAME data already fetched above (nothing new is fetched,
+// nothing is summarized away — the full raw table above still shows every row verbatim).
+function firstSentence(text) {
+    if (!text) return '';
+    const m = text.match(/^.*?[.!?](?=\s|$)/);
+    return m ? m[0] : text;
+}
+
+function statusCard(name, status, reason) {
+    return `<div class="status-card">
+        <div class="sc-name"><span>${escapeHtml(name)}</span>${statusBadge(status)}</div>
+        <div class="sc-reason">${escapeHtml(reason)}</div>
+    </div>`;
+}
+
+function renderImplementationOverview(components, evalByLabel) {
+    const IMPLEMENTED_IDS = new Set(['crawler', 'url_features', 'dom_graph']);
+    const EXPERIMENTAL_STATUSES = new Set(['experimental', 'heuristic', 'not_configured']);
+
+    const implemented = components.filter(c => IMPLEMENTED_IDS.has(c.id) || c.status === 'available');
+    const experimental = components.filter(c => EXPERIMENTAL_STATUSES.has(c.status));
+    // "dataset" and "evaluation" are rendered from the /dashboard/datasets and /api/v1/metrics
+    // responses in the Data & Evaluation section above, not from this array — exclude their
+    // component_registry() counterparts here so they aren't shown twice.
+    const shown = new Set([...implemented, ...experimental].map(c => c.id));
+    shown.add('dataset');
+    shown.add('evaluation');
+    const planned = components.filter(c => !shown.has(c.id));
+
+    document.getElementById('implemented-grid').innerHTML =
+        implemented.map(c => statusCard(c.name, c.status, c.reason)).join('') || '<p class="status-note">None reported.</p>';
+
+    document.getElementById('experimental-grid').innerHTML =
+        experimental.map(c => statusCard(c.name, c.status, c.reason)).join('') || '<p class="status-note">None reported.</p>';
+
+    const dataset = evalByLabel['Dataset'];
+    const evaluation = evalByLabel['Evaluation metrics'];
+    const dataEvalCards = [];
+    if (dataset) dataEvalCards.push(statusCard('Dataset', dataset.status, dataset.reason));
+    if (evaluation) dataEvalCards.push(statusCard('Evaluation metrics', evaluation.status, evaluation.reason));
+    document.getElementById('data-eval-grid').innerHTML = dataEvalCards.join('') || '<p class="status-note">Not available.</p>';
+
+    const limitations = [];
+    const gnn = components.find(c => c.id === 'gnn');
+    if (gnn) limitations.push(`<strong>GNN:</strong> ${escapeHtml(firstSentence(gnn.reason))}`);
+    const llm = components.find(c => c.id === 'llm');
+    if (llm && llm.status !== 'available') limitations.push(`<strong>LLM:</strong> ${escapeHtml(firstSentence(llm.reason))}`);
+    if (dataset) limitations.push(`<strong>Dataset:</strong> ${escapeHtml(firstSentence(dataset.reason))}`);
+    if (evaluation) limitations.push(`<strong>Evaluation:</strong> ${escapeHtml(firstSentence(evaluation.reason))}`);
+    const fusion = components.find(c => c.id === 'fusion');
+    if (fusion) limitations.push(`<strong>Fusion:</strong> ${escapeHtml(firstSentence(fusion.reason))}`);
+    document.getElementById('limitations-list').innerHTML = limitations.map(l => `<li>${l}</li>`).join('');
+
+    document.getElementById('planned-count').textContent = planned.length;
+    document.getElementById('planned-chips').innerHTML = planned.map(c =>
+        `<span class="planned-chip" title="${escapeHtml(c.reason)}">${escapeHtml(c.name)}</span>`).join('');
 }
