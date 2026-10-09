@@ -1,11 +1,9 @@
 """
-Main Launcher & Startup Runner for Multimodal Phishing Detection System.
-Initializes data pipelines, tests GNN & 10-LLM engines, and starts the FastAPI Uvicorn Server.
+Launcher for the PhishGuard API and dashboard.
+Prints the real status of each component, then starts the FastAPI server with Uvicorn.
 """
 
-import os
 import sys
-import time
 import socket
 
 # Ensure UTF-8 encoding for Windows standard output safety
@@ -16,10 +14,7 @@ if hasattr(sys.stdout, 'reconfigure'):
         pass
 
 import uvicorn
-from dataset_loader import load_dataset
-from gnn_model import analyze_dom_graph
-from llm_ensemble import get_llm_orchestrator
-from multimodal_fusion import get_detector
+from component_status import component_registry
 
 
 def find_available_port(start_port: int = 8000, max_tries: int = 10) -> int:
@@ -34,45 +29,20 @@ def find_available_port(start_port: int = 8000, max_tries: int = 10) -> int:
     return start_port
 
 
-def initialize_system(port: int = 8000):
+def print_component_status(port: int):
     print("=" * 70)
-    print("  PHISHGNN AI: MULTIMODAL PHISHING WEBSITE DETECTION PLATFORM")
-    print("  PyTorch Graph Neural Networks (GNN) + 10-LLM Engine Consensus")
+    print("  PhishGuard AI - phishing website analysis (development build)")
     print("=" * 70)
-
-    # 1. Dataset Verification
-    print("\n[1/4] Loading & Verifying Kaggle Multimodal Dataset...")
-    df = load_dataset()
-    print(f"      [OK] Dataset Loaded Successfully: {df.shape[0]} samples, {df.shape[1]} features.")
-    phish_cnt = (df['label'] == 1).sum()
-    legit_cnt = (df['label'] == 0).sum()
-    print(f"      [OK] Class Balance: {phish_cnt} Phishing | {legit_cnt} Legitimate")
-
-    # 2. GNN Model Check
-    print("\n[2/4] Testing DOM & Hyperlink Graph Neural Network Engine...")
-    sample_html = "<html><body><form action='http://phish.com/steal' method='POST'><input type='password'></form></body></html>"
-    gnn_out = analyze_dom_graph(sample_html, "http://phish.com/login")
-    print(f"      [OK] GNN Threat Score: {gnn_out['gnn_threat_score']*100:.2f}%")
-    print(f"      [OK] DOM Graph Nodes: {gnn_out['graph_stats']['node_count']} | Edges: {gnn_out['graph_stats']['edge_count']}")
-
-    # 3. 10-LLM Ensemble Check
-    print("\n[3/4] Verifying 10-LLM Multi-Engine Consensus Orchestrator...")
-    orchestrator = get_llm_orchestrator()
-    print(f"      [OK] Registered 10 LLM Engines: {', '.join([e.name for e in orchestrator.engines[:4]])}...")
-
-    # 4. Multimodal Fusion Engine Check
-    print("\n[4/4] Initializing Multimodal Fusion Pipeline...")
-    detector = get_detector()
-    print("      [OK] Multimodal Detector Ready.")
-
-    print("\n" + "=" * 70)
-    print("  SYSTEM HEALTH: 100% OPERATIONAL")
-    print(f"  Dashboard UI: http://127.0.0.1:{port}")
-    print(f"  REST API Docs: http://127.0.0.1:{port}/docs")
+    for comp in component_registry():
+        print(f"  [{comp['status']:<15}] {comp['name']}")
+    print("-" * 70)
+    print("  No trained detection model is available yet; scans return no verdict.")
+    print(f"  Dashboard UI:  http://127.0.0.1:{port}")
+    print(f"  REST API docs: http://127.0.0.1:{port}/docs")
     print("=" * 70 + "\n")
 
 
 if __name__ == "__main__":
     target_port = find_available_port(8000, 20)
-    initialize_system(target_port)
+    print_component_status(target_port)
     uvicorn.run("api:app", host="127.0.0.1", port=target_port, reload=False)

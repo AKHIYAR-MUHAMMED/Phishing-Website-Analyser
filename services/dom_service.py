@@ -1,12 +1,13 @@
 """
-HTML DOM Structural Parsing Service.
+HTML DOM structural statistics service (built from request-supplied HTML only).
 """
 
-from typing import Dict, Any
-from dataset_loader import extract_dom_graph_features
+from typing import Any, Dict
+
+from multimodal_fusion import analyse_dom
 
 
 class DOMService:
     @staticmethod
     def parse(html_content: str, url: str) -> Dict[str, Any]:
-        return extract_dom_graph_features(html_content, url)
+        return analyse_dom(url, html_content)

@@ -405,7 +405,7 @@ def extract_dom_graph_features(html_content: str, target_url: str) -> Dict[str, 
     }
 
 
-KAGGLE_CACHE_CSV = r"C:\Users\akhiy\.cache\kagglehub\datasets\taruntiwarihp\phishing-site-urls\versions\1\phishing_site_urls.csv"
+from config import KAGGLE_CACHE_CSV  # noqa: E402 (kept near its use; see config.py)
 
 KAGGLE_DATASET_SOURCES = [
     {"name": "duygujones/website-phishing-detection-ml-project", "type": "UCI Structural Features", "weight": 0.25},

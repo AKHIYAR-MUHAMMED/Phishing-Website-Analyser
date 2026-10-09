@@ -3,776 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PhishGuard-X - Production Multimodal Phishing Detection Platform</title>
-    <!-- Google Fonts -->
+    <title>PhishGuard AI - Development Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-    <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Three.js 3D Engine Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <link rel="stylesheet" href="/static/styles.css?v=3.0">
+    <link rel="stylesheet" href="/static/styles.css?v=4.0">
 </head>
 
 <body>
-    <!-- Interactive 3D Ambient WebGL Particles Background Canvas -->
-    <canvas id="webgl-bg-canvas"></canvas>
-
+    <!--
+        Honesty rule for this page: every value shown comes from an API response.
+        There are no placeholder numbers and no client-side verdicts. If the backend
+        fails or a component is unavailable, the page says so.
+    -->
     <div class="app-container">
-        <!-- Sidebar Navigation -->
         <aside class="sidebar">
             <div class="brand">
-                <div class="logo-icon">
-                    <i class="fa-solid fa-shield-cat"></i>
-                </div>
+                <div class="logo-icon"><i class="fa-solid fa-shield-cat"></i></div>
                 <div class="brand-text">
-                    <h2>PhishGuard <span>-X</span></h2>
-                    <p>Production Multimodal Cyber Defense</p>
+                    <h2>PhishGuard <span>AI</span></h2>
+                    <p>Development build</p>
                 </div>
             </div>
 
             <nav class="nav-menu">
                 <a href="#" class="nav-item active" data-tab="scanner-tab">
-                    <i class="fa-solid fa-layer-group"></i> URL & Screenshot Scanner
+                    <i class="fa-solid fa-magnifying-glass"></i> Scanner
                 </a>
-                <a href="#" class="nav-item" data-tab="llm-tab">
-                    <i class="fa-solid fa-brain"></i> 10-LLM Bayesian Matrix
+                <a href="#" class="nav-item" data-tab="status-tab">
+                    <i class="fa-solid fa-list-check"></i> Component Status
                 </a>
-                <a href="#" class="nav-item" data-tab="vision-tab">
-                    <i class="fa-solid fa-eye"></i> Vision Transformer (ViT)
-                </a>
-                <a href="#" class="nav-item" data-tab="graph-tab">
-                    <i class="fa-solid fa-diagram-project"></i> DOM Graph Neural Net
-                </a>
-                <a href="#" class="nav-item" data-tab="whois-tab">
-                    <i class="fa-solid fa-lock"></i> WHOIS & SSL Intelligence
-                </a>
-                <a href="#" class="nav-item" data-tab="dataset-tab">
-                    <i class="fa-solid fa-database"></i> 4-Kaggle Merged Engine
-                </a>
-                <a href="#" class="nav-item" data-tab="database-tab">
-                    <i class="fa-solid fa-server"></i> Database & Scan History
+                <a href="#" class="nav-item" data-tab="evaluation-tab">
+                    <i class="fa-solid fa-chart-column"></i> Evaluation &amp; Data
                 </a>
             </nav>
-
-            <div class="system-status">
-                <div class="status-indicator online"></div>
-                <div class="status-info">
-                    <span class="status-label">9 AI Modalities + ViT</span>
-                    <span class="status-value">Live Active Telemetry</span>
-                </div>
-            </div>
         </aside>
 
-        <!-- Main Content Area -->
         <main class="main-content">
             <header class="top-header">
                 <div class="header-title">
-                    <h1 id="page-heading">URL & Screenshot Multimodal Scanner</h1>
-                    <p>Powered by PyTorch GNN (GAT), Vision Transformers (ViT), BERT, Phishpedia Logo Matcher & 10-LLM Bayesian Consensus</p>
-                </div>
-                <div class="header-badges">
-                    <span class="badge badge-accent"><i class="fa-solid fa-bolt"></i> Realtime Sub-Second (14ms)</span>
-                    <span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> 100.0% Test Accuracy</span>
+                    <h1 id="page-heading">Scanner</h1>
+                    <p>Multimodal phishing website analysis (DOM graph, language model, URL/HTML features). Work in progress.</p>
                 </div>
             </header>
 
-            <!-- LIVE TELEMETRY & REALTIME THREAT STREAM BAR -->
-            <div class="live-telemetry-bar">
-                <div class="telemetry-item live-pulse-box">
-                    <span class="pulse-dot"></span>
-                    <span class="telemetry-label">LIVE THREAT STREAM</span>
-                </div>
-                <div class="threat-ticker-container">
-                    <div class="threat-ticker-track" id="threat-ticker-track">
-                        <!-- Dynamic realtime scrolling threat events -->
-                        <span class="ticker-item danger"><i class="fa-solid fa-skull"></i> [22:43:01] BLOCKED: http://paypal-security-verification-center.com (Threat: 99.1%)</span>
-                        <span class="ticker-item success"><i class="fa-solid fa-circle-check"></i> [22:42:58] SAFE: https://github.com/torvalds/linux (Verified)</span>
-                        <span class="ticker-item danger"><i class="fa-solid fa-triangle-exclamation"></i> [22:42:52] BLOCKED: http://login.microsoftonline.security-auth.xyz (Threat: 98.4%)</span>
-                    </div>
-                </div>
-                <div class="telemetry-metrics">
-                    <div class="metric-pill">
-                        <i class="fa-solid fa-clock"></i>
-                        <span id="live-clock-val">--:--:-- UTC</span>
-                    </div>
-                    <div class="metric-pill">
-                        <i class="fa-solid fa-shield-virus"></i>
-                        <span>Scanned: <strong id="scanned-count-val">14,291</strong></span>
-                    </div>
-                    <div class="metric-pill">
-                        <i class="fa-solid fa-ban"></i>
-                        <span>Blocked: <strong id="blocked-count-val">8,942</strong></span>
-                    </div>
-                    <div class="metric-pill">
-                        <i class="fa-solid fa-microchip"></i>
-                        <span>CPU: <strong id="cpu-load-val">14.2%</strong></span>
-                    </div>
-                    <div class="metric-pill">
-                        <i class="fa-solid fa-memory"></i>
-                        <span>RAM: <strong id="ram-load-val">3.2 GB</strong></span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- SCANNER TAB (COMBINED URL & SCREENSHOT WORKSPACE) -->
+            <!-- SCANNER TAB -->
             <section id="scanner-tab" class="tab-page active">
-                <!-- 3D INTERACTIVE HERO SECURITY BANNER -->
-                <div class="hero-3d-card tilt-3d mb-4">
-                    <div class="hero-3d-info">
-                        <div class="hero-tag"><i class="fa-solid fa-cube"></i> 3D Realtime Threat Telemetry</div>
-                        <h2>Multimodal Cyber AI Shield</h2>
-                        <p>Real-time 3D interactive threat matrix powered by PyTorch GNN, Vision Transformers, and 10-LLM Bayesian consensus intelligence.</p>
-                        <div class="hero-3d-stats">
-                            <div class="h-stat">
-                                <span class="h-stat-label">3D WebGL Engine</span>
-                                <span class="h-stat-val text-cyan"><i class="fa-solid fa-microchip"></i> Three.js Hardware Accel</span>
-                            </div>
-                            <div class="h-stat">
-                                <span class="h-stat-label">Model Accuracy</span>
-                                <span class="h-stat-val text-green"><i class="fa-solid fa-shield"></i> 100.0% Verified</span>
-                            </div>
-                            <div class="h-stat">
-                                <span class="h-stat-label">Shield Telemetry</span>
-                                <span class="h-stat-val text-purple" id="hero-shield-status"><i class="fa-solid fa-rotate"></i> Active 3D Orbit</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="hero-3d-viewport">
-                        <canvas id="shield-3d-canvas"></canvas>
-                        <div class="viewport-controls">
-                            <span class="view-badge"><i class="fa-solid fa-arrows-spin"></i> Interactive 3D Shield (Drag to Rotate)</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="scan-box-card tilt-3d">
-                    <!-- Scanner Mode Switcher -->
-                    <div class="scan-mode-tabs mb-3">
-                        <button class="mode-tab-btn active" id="mode-dual-btn" data-mode="dual">
-                            <i class="fa-solid fa-layer-group"></i> Multimodal Dual Search (URL + Screenshot)
-                        </button>
-                        <button class="mode-tab-btn" id="mode-url-btn" data-mode="url">
-                            <i class="fa-solid fa-globe"></i> URL Input Only
-                        </button>
-                        <button class="mode-tab-btn" id="mode-ss-btn" data-mode="screenshot">
-                            <i class="fa-solid fa-camera"></i> Screenshot File Upload Only
-                        </button>
-                    </div>
-
-                    <!-- URL Input Row -->
-                    <div class="scan-input-wrapper mb-3" id="url-input-wrapper">
+                <div class="scan-box-card">
+                    <div class="scan-input-wrapper">
                         <i class="fa-solid fa-globe search-icon"></i>
-                        <input type="text" id="target-url-input" placeholder="Enter target website URL to evaluate (e.g. http://paypal-security-check.com/login)..." value="http://paypal-security-verification-center.com/signin?account_login=update">
-                    </div>
-
-                    <!-- Unified Screenshot Dropzone & Upload Box -->
-                    <div class="unified-ss-dropzone-box mb-3" id="unified-ss-dropzone">
-                        <input type="file" id="screenshot-file-input" class="hidden-file-input" accept="image/*">
-                        <div class="dropzone-content">
-                            <div class="dropzone-icon-box">
-                                <i class="fa-solid fa-cloud-arrow-up"></i>
-                            </div>
-                            <div class="dropzone-text-info">
-                                <h3>Drag & Drop Webpage Screenshot Image File Here</h3>
-                                <p>Analyze visual brand logos (Phishpedia), pHash fingerprints, ViT patch self-attention & OCR text overlays (PNG, JPG, WEBP)</p>
-                            </div>
-                            <button class="btn-preset action-btn" id="select-file-btn" type="button">
-                                <i class="fa-solid fa-folder-open"></i> Browse Image File
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Screenshot Selected Preview Strip -->
-                    <div id="ss-preview-container" class="ss-preview-strip mb-3 hidden">
-                        <div class="ss-preview-inner">
-                            <div class="ss-thumbnail-box">
-                                <img id="ss-preview-img" src="" alt="Screenshot Preview">
-                            </div>
-                            <div class="ss-meta-details">
-                                <h4 id="ss-filename-text"><i class="fa-solid fa-file-image"></i> screenshot.png</h4>
-                                <p id="ss-meta-info">File Size: 142 KB | Viewport: 1920x1080 RGB</p>
-                            </div>
-                            <button id="clear-ss-btn" class="btn-preset danger-preset" type="button">
-                                <i class="fa-solid fa-xmark"></i> Remove Screenshot
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Combined Presets & Actions Row -->
-                    <div class="quick-presets">
-                        <span class="preset-label"><i class="fa-solid fa-bolt"></i> Quick Presets:</span>
-                        <button class="btn-preset phishing" data-url="http://paypal-security-verification-center.com/signin?account_login=update">
-                            <i class="fa-brands fa-paypal"></i> PayPal Clone
-                        </button>
-                        <button class="btn-preset phishing" data-url="http://login.microsoftonline.security-auth-check.xyz/oauth2/authorize">
-                            <i class="fa-brands fa-microsoft"></i> Microsoft 365
-                        </button>
-                        <button class="btn-preset legitimate" data-url="https://github.com/torvalds/linux">
-                            <i class="fa-brands fa-github"></i> GitHub (Safe)
-                        </button>
-                        <button class="btn-preset legitimate" data-url="https://www.google.com/search?q=machine+learning">
-                            <i class="fa-brands fa-google"></i> Google (Safe)
-                        </button>
-
-                        <span class="preset-label style-spacer">| Visual Presets:</span>
-                        <button class="btn-preset ss-preset" data-brand="PayPal" data-url="http://paypal-security-verification-center.com/signin">
-                            <i class="fa-solid fa-image"></i> PayPal Visual
-                        </button>
-                        <button class="btn-preset ss-preset" data-brand="Microsoft" data-url="http://login.microsoftonline.security-auth-check.xyz/oauth2">
-                            <i class="fa-solid fa-image"></i> M365 Visual
-                        </button>
-                        <button class="btn-preset ss-preset" data-brand="Bank of America" data-url="http://bankofamerica-verify-session.net/login">
-                            <i class="fa-solid fa-image"></i> BoA Visual
-                        </button>
-
-                        <button class="btn-preset action-preset" id="toggle-batch-btn">
-                            <i class="fa-solid fa-list-check"></i> Batch Scan Mode
+                        <input type="text" id="target-url-input" placeholder="Enter a URL to analyse">
+                        <button id="start-scan-btn" class="btn-primary">
+                            <i class="fa-solid fa-magnifying-glass"></i> Analyse
                         </button>
                     </div>
-
-                    <!-- Primary Unified Action Button -->
-                    <div class="scan-action-row mt-3">
-                        <button id="start-scan-btn" class="btn-primary btn-large">
-                            <i class="fa-solid fa-shield-virus"></i> Run Multimodal AI Scan (URL + Screenshot)
-                        </button>
-                    </div>
+                    <p class="status-note mt-2">
+                        If you leave HTML empty, the page is fetched live with a GET request (8s timeout,
+                        5 redirects, 2MB size limit; no forms are submitted). Paste HTML instead to analyse a
+                        specific snapshot without a network request.
+                    </p>
+                    <textarea id="html-content-input" class="batch-textarea" rows="5" placeholder="Optional: page HTML"></textarea>
                 </div>
 
-                <!-- BATCH SCAN DRAWER -->
-                <div id="batch-scan-container" class="card-box hidden mt-4">
-                    <h3><i class="fa-solid fa-layer-group"></i> Multi-URL Parallel Batch Scanning</h3>
-                    <p>Evaluate up to 10 URLs concurrently across all detection microservice models.</p>
-                    <textarea id="batch-urls-input" class="batch-textarea" rows="4" placeholder="Enter one URL per line...
-http://paypal-security-verification-center.com/login
-https://github.com/torvalds/linux
-http://login.microsoftonline.security-auth-check.xyz/oauth2"></textarea>
-                    <div class="mt-2">
-                        <button id="run-batch-scan-btn" class="btn-primary">
-                            <i class="fa-solid fa-bolt"></i> Execute Parallel Batch Scan
-                        </button>
-                    </div>
-                    <div id="batch-results-table-wrapper" class="table-wrapper hidden mt-4">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Target URL</th>
-                                    <th>Verdict</th>
-                                    <th>Threat Score</th>
-                                    <th>Risk Classification</th>
-                                </tr>
-                            </thead>
-                            <tbody id="batch-tbody"></tbody>
-                        </table>
-                    </div>
+                <div id="scan-error" class="card-box mt-4 hidden">
+                    <h3><i class="fa-solid fa-triangle-exclamation"></i> Scan failed</h3>
+                    <p id="scan-error-text"></p>
                 </div>
 
-                <!-- LIVE EXECUTION TERMINAL LOG STREAM CONSOLE -->
-                <div id="terminal-stream-card" class="card-box terminal-card mt-4 hidden">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="dot red"></span>
-                            <span class="dot yellow"></span>
-                            <span class="dot green"></span>
-                        </div>
-                        <div class="terminal-title">
-                            <i class="fa-solid fa-terminal"></i> PhishGuard-X Multimodal Pipeline Execution Telemetry Stream
-                        </div>
-                        <div class="terminal-status">
-                            <span class="pulse-dot"></span> SCANNING IN PROGRESS
-                        </div>
-                    </div>
-                    <div class="terminal-body" id="terminal-console-body">
-                        <!-- Step logs streamed here live -->
-                    </div>
-                </div>
-
-                <!-- SCAN RESULTS GRID -->
-                <div id="results-container" class="results-container hidden">
-                    <!-- Verdict & Threat Score Banner -->
-                    <div class="verdict-card" id="verdict-card">
-                        <div class="verdict-header">
-                            <div class="verdict-badge-box">
-                                <span class="verdict-tag" id="verdict-tag">PHISHING DETECTED</span>
-                                <span class="risk-badge" id="risk-badge">CRITICAL RISK</span>
-                                <span class="category-badge" id="category-badge">BRAND IMPERSONATION</span>
-                            </div>
-                            <div class="scan-meta">
-                                <span><i class="fa-solid fa-clock"></i> Latency: <strong id="latency-val">14 ms</strong></span>
-                                <span><i class="fa-solid fa-bullseye"></i> Confidence: <strong id="confidence-val">99.8%</strong></span>
-                            </div>
-                        </div>
-
-                        <div class="verdict-body">
-                            <div class="threat-meter-box">
-                                <div class="meter-circle" id="meter-circle">
-                                    <div class="meter-value" id="meter-score">99.1%</div>
-                                    <div class="meter-label">Threat Index</div>
-                                </div>
-                            </div>
-                            
-                            <div class="modality-bars">
-                                <h3><i class="fa-solid fa-layer-group"></i> 9-Modality Feature Fusion Matrix</h3>
-                                
-                                <div class="modality-item">
-                                    <div class="mod-info">
-                                        <span><i class="fa-solid fa-brain"></i> 10-LLM Bayesian Consensus</span>
-                                        <strong id="score-llm">99.1%</strong>
-                                    </div>
-                                    <div class="progress-track"><div class="progress-fill fill-llm" id="bar-llm" style="width: 99.1%"></div></div>
-                                </div>
-
-                                <div class="modality-item">
-                                    <div class="mod-info">
-                                        <span><i class="fa-solid fa-diagram-project"></i> DOM GNN Graph Topology</span>
-                                        <strong id="score-gnn">95.0%</strong>
-                                    </div>
-                                    <div class="progress-track"><div class="progress-fill fill-gnn" id="bar-gnn" style="width: 95.0%"></div></div>
-                                </div>
-
-                                <div class="modality-item">
-                                    <div class="mod-info">
-                                        <span><i class="fa-solid fa-eye"></i> Vision Transformer (ViT) Layout</span>
-                                        <strong id="score-vit">94.5%</strong>
-                                    </div>
-                                    <div class="progress-track"><div class="progress-fill fill-vit" id="bar-vit" style="width: 94.5%"></div></div>
-                                </div>
-
-                                <div class="modality-item">
-                                    <div class="mod-info">
-                                        <span><i class="fa-solid fa-tree"></i> Classical ML (XGBoost/RF/CatBoost)</span>
-                                        <strong id="score-ml">98.2%</strong>
-                                    </div>
-                                    <div class="progress-track"><div class="progress-fill fill-ml" id="bar-ml" style="width: 98.2%"></div></div>
-                                </div>
-
-                                <div class="modality-item">
-                                    <div class="mod-info">
-                                        <span><i class="fa-solid fa-font"></i> BERT Transformer Sequence NLP</span>
-                                        <strong id="score-bert">96.8%</strong>
-                                    </div>
-                                    <div class="progress-track"><div class="progress-fill fill-bert" id="bar-bert" style="width: 96.8%"></div></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Recommended Actions Banner -->
-                        <div class="recommended-action-banner" id="action-banner">
-                            <i class="fa-solid fa-shield-cat action-icon"></i>
-                            <div>
-                                <strong>Recommended Security Action:</strong>
-                                <p id="action-text">BLOCK IMMEDIATELY: Quarantine URL in gateway firewall, revoke active session tokens, and issue security incident alert.</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- INTEGRATED VISUAL AI & SCREENSHOT INSPECTION CARD -->
-                    <div id="visual-ai-results-card" class="card-box mt-4">
-                        <div class="tab-header-flex">
-                            <div>
-                                <h3><i class="fa-solid fa-camera-retro"></i> Visual AI & Screenshot Inspection Suite</h3>
-                                <p>Phishpedia Logo Detection, Siamese Brand Matching, pHash Binary Fingerprint & OCR Credential Extraction.</p>
-                            </div>
-                            <span class="badge badge-accent" id="visual-ai-badge"><i class="fa-solid fa-eye"></i> ViT Vision Pipeline Active</span>
-                        </div>
-
-                        <div class="grid-2-col mt-3">
-                            <!-- Phishpedia & Brand Attribution -->
-                            <div class="intel-card">
-                                <h3><i class="fa-solid fa-bullseye"></i> Phishpedia Logo & Brand Attribution</h3>
-                                <div class="intel-row"><span>Detected Brand Logo:</span> <strong id="ss-detected-logo" style="color: #ef4444;">PayPal Logo Bounding Box</strong></div>
-                                <div class="intel-row"><span>Siamese Similarity:</span> <strong id="ss-siamese-score" style="color: #f59e0b;">98.2% Target Match</strong></div>
-                                <div class="intel-row"><span>Object Detector:</span> <strong>Faster R-CNN Anchor Boxes</strong></div>
-                                <div class="intel-row"><span>Visual Verdict:</span> <strong id="ss-layout-verdict" style="color: #ef4444;">PHISHING (Spoofed PayPal)</strong></div>
-                            </div>
-
-                            <!-- Perceptual Hashing & FAISS -->
-                            <div class="intel-card">
-                                <h3><i class="fa-solid fa-fingerprint"></i> Perceptual Hashing (pHash) & FAISS</h3>
-                                <div class="intel-row"><span>pHash Binary Hash:</span> <strong id="ss-phash-val">0x9F82A41C...</strong></div>
-                                <div class="intel-row"><span>FAISS Cluster Match:</span> <strong id="ss-faiss-target">PayPal Login Cluster</strong></div>
-                                <div class="intel-row"><span>Color Palette Similarity:</span> <strong id="ss-palette-val">96.4% Match to Target Brand</strong></div>
-                                <div class="intel-row"><span>EER Threshold State:</span> <strong style="color: #10b981;">Optimal (FPR = FNR)</strong></div>
-                            </div>
-                        </div>
-
-                        <!-- OCR Extracted Tokens -->
-                        <div class="mt-3">
-                            <h4 style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 8px;"><i class="fa-solid fa-font"></i> OCR Extracted Credential Harvester Keywords:</h4>
-                            <div id="ss-ocr-tokens-box" class="ocr-box">
-                                <span class="ocr-token danger">sign in</span>
-                                <span class="ocr-token danger">verify account</span>
-                                <span class="ocr-token danger">password</span>
-                                <span class="ocr-token warning">security update</span>
-                                <span class="ocr-token">paypal</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- XAI Evidence Matrix -->
+                <div id="results-container" class="hidden">
                     <div class="card-box mt-4">
-                        <h3><i class="fa-solid fa-magnifying-glass-chart"></i> Explainable AI (XAI) Evidence Matrix</h3>
+                        <h3><i class="fa-solid fa-globe"></i> Crawl</h3>
+                        <div id="crawl-box"></div>
+                    </div>
+
+                    <div class="card-box mt-4">
+                        <h3><i class="fa-solid fa-scale-balanced"></i> Decision</h3>
+                        <div class="intel-row"><span>Verdict</span> <strong id="verdict-val"></strong></div>
+                        <div class="intel-row"><span>Phishing probability</span> <strong id="probability-val"></strong></div>
+                        <div class="intel-row"><span>Measured processing latency</span> <strong id="latency-val"></strong></div>
+                        <p class="status-note mt-2" id="decision-reason"></p>
+                    </div>
+
+                    <div class="card-box mt-4">
+                        <h3><i class="fa-solid fa-layer-group"></i> Modalities</h3>
                         <div class="table-wrapper">
-                            <table class="data-table" id="xai-table">
-                                <thead>
-                                    <tr>
-                                        <th>AI Modality / Engine</th>
-                                        <th>Risk Score</th>
-                                        <th>Extracted Key Finding & Technical Evidence</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="xai-tbody">
-                                    <!-- Populated via JS -->
-                                </tbody>
+                            <table class="data-table">
+                                <thead><tr><th>Modality</th><th>Status</th><th>Details</th></tr></thead>
+                                <tbody id="modalities-tbody"></tbody>
                             </table>
                         </div>
                     </div>
 
-                    <!-- Threat Vectors Matrix & GNN Visualizer -->
                     <div class="grid-2-col mt-4">
                         <div class="card-box">
-                            <h3><i class="fa-solid fa-triangle-exclamation"></i> Active Cyber Threat Vectors</h3>
-                            <div id="threat-vectors-list" class="threat-list">
-                                <!-- Dynamic items -->
-                            </div>
+                            <h3><i class="fa-solid fa-link"></i> URL features (observed)</h3>
+                            <div id="url-features-box"></div>
                         </div>
-
                         <div class="card-box">
-                            <h3><i class="fa-solid fa-network-wired"></i> Real-time DOM Graph Network</h3>
-                            <div class="canvas-container">
-                                <canvas id="dom-graph-canvas" width="450" height="200"></canvas>
-                            </div>
-                            <div class="graph-stats-summary" id="graph-stats-summary">
-                                <span>Nodes: <strong id="node-count-val">24</strong></span>
-                                <span>Edges: <strong id="edge-count-val">38</strong></span>
-                                <span>Density: <strong id="density-val">0.137</strong></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- 10-LLM TAB -->
-            <section id="llm-tab" class="tab-page">
-                <div class="card-box">
-                    <div class="tab-header-flex">
-                        <div>
-                            <h2><i class="fa-solid fa-brain"></i> 10-LLM Bayesian Consensus Matrix</h2>
-                            <p>Temperature-calibrated inference and model reliability scores across 10 state-of-the-art LLMs.</p>
-                        </div>
-                        <div class="consensus-badge" id="consensus-rate-badge">
-                            100% Bayesian Consensus Agreement
-                        </div>
-                    </div>
-
-                    <div class="llm-toolbar mt-3 mb-3">
-                        <button id="run-comparison-btn" class="btn-primary">
-                            <i class="fa-solid fa-code-compare"></i> Compare Selected LLM Models
-                        </button>
-                        <button id="select-all-llm-btn" class="btn-preset">
-                            <i class="fa-solid fa-square-check"></i> Select All Models
-                        </button>
-                        <button id="deselect-all-llm-btn" class="btn-preset">
-                            <i class="fa-solid fa-square"></i> Deselect All
-                        </button>
-                    </div>
-
-                    <div class="llm-grid" id="llm-engines-grid">
-                        <!-- 10 LLM Cards dynamically populated -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- VISION TRANSFORMER & DUAL-STAGE HYBRID TAB -->
-            <section id="vision-tab" class="tab-page">
-                <div class="card-box">
-                    <h2><i class="fa-solid fa-eye"></i> Multi-Stage Computer Vision Architecture (MDPI 2026)</h2>
-                    <p>Dual-Stage Hybrid Visual Triage Pipeline: Perceptual Hashing (pHash + DCT + FAISS), Phishpedia (Faster R-CNN + Siamese), VisualPhishNet (VGG-16 Triplet Loss), and ViT Spatial Patch Self-Attention.</p>
-
-                    <!-- 5-Stage Architecture Banner -->
-                    <div class="card-box mt-3" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 12px; padding: 20px;">
-                        <h3 style="color: #38bdf8; font-size: 1.1rem; margin-bottom: 15px;"><i class="fa-solid fa-sitemap"></i> Multi-Stage Architecture Flow</h3>
-                        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
-                            <div style="flex: 1; min-width: 140px; background: rgba(30, 41, 59, 0.8); border: 1px solid #475569; padding: 12px; border-radius: 8px; text-align: center;">
-                                <strong style="color: #94a3b8; font-size: 0.85rem;">INPUTS</strong>
-                                <p style="font-size: 0.8rem; margin-top: 4px; color: #cbd5e1;">URL / Screenshots</p>
-                            </div>
-                            <i class="fa-solid fa-arrow-right" style="color: #38bdf8;"></i>
-                            <div style="flex: 1; min-width: 140px; background: rgba(30, 41, 59, 0.8); border: 1px solid #38bdf8; padding: 12px; border-radius: 8px; text-align: center;">
-                                <strong style="color: #38bdf8; font-size: 0.85rem;">STAGE 1 FILTER</strong>
-                                <p style="font-size: 0.8rem; margin-top: 4px; color: #e2e8f0;">pHash + DCT + FAISS</p>
-                            </div>
-                            <i class="fa-solid fa-arrow-right" style="color: #38bdf8;"></i>
-                            <div style="flex: 1; min-width: 140px; background: rgba(30, 41, 59, 0.8); border: 1px solid #f59e0b; padding: 12px; border-radius: 8px; text-align: center;">
-                                <strong style="color: #f59e0b; font-size: 0.85rem;">STAGE 2 DETECTOR</strong>
-                                <p style="font-size: 0.8rem; margin-top: 4px; color: #e2e8f0;">Phishpedia Logo Matcher</p>
-                            </div>
-                            <i class="fa-solid fa-arrow-right" style="color: #38bdf8;"></i>
-                            <div style="flex: 1; min-width: 140px; background: rgba(30, 41, 59, 0.8); border: 1px solid #a855f7; padding: 12px; border-radius: 8px; text-align: center;">
-                                <strong style="color: #a855f7; font-size: 0.85rem;">STAGE 3 FUSION</strong>
-                                <p style="font-size: 0.8rem; margin-top: 4px; color: #e2e8f0;">ViT + 10-LLM Matrix</p>
-                            </div>
-                            <i class="fa-solid fa-arrow-right" style="color: #38bdf8;"></i>
-                            <div style="flex: 1; min-width: 140px; background: rgba(30, 41, 59, 0.8); border: 1px solid #22c55e; padding: 12px; border-radius: 8px; text-align: center;">
-                                <strong style="color: #22c55e; font-size: 0.85rem;">OUTPUT TRIAGE</strong>
-                                <p style="font-size: 0.8rem; margin-top: 4px; color: #e2e8f0;">Binary Verdict + XAI</p>
-                            </div>
+                            <h3><i class="fa-solid fa-diagram-project"></i> DOM graph (observed)</h3>
+                            <div id="dom-graph-box"></div>
                         </div>
                     </div>
 
                     <div class="grid-2-col mt-4">
-                        <div class="vision-info-card">
-                            <i class="fa-solid fa-camera icon-accent"></i>
-                            <h4>Phishpedia Logo Bounding Box & Siamese Match</h4>
-                            <p id="vit-logo-text">PayPal / Microsoft Spoofed Logo (98.2% Siamese Similarity)</p>
+                        <div class="card-box">
+                            <h3><i class="fa-solid fa-code"></i> JavaScript indicators (heuristic)</h3>
+                            <div id="js-box"></div>
                         </div>
-
-                        <div class="vision-info-card">
-                            <i class="fa-solid fa-sliders icon-danger"></i>
-                            <h4>EER Threshold Search (FPR = FNR)</h4>
-                            <p id="vit-layout-text">CERT Polska Optimal EER = 8.00 | PP = 3.00 | VP = 50.00</p>
-                        </div>
-                    </div>
-
-                    <!-- Benchmark Comparison Table -->
-                    <h3 class="mt-4"><i class="fa-solid fa-table-cells"></i> Experimental Benchmark Comparison</h3>
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Dataset</th>
-                                    <th>Method Paradigm</th>
-                                    <th>F1 Micro</th>
-                                    <th>F1 Macro</th>
-                                    <th>MCC</th>
-                                    <th>Identification Rate</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr><td>CERT Polska</td><td>VisualPhishNet</td><td>0.3654</td><td>0.1481</td><td>0.0733</td><td>0.7093</td></tr>
-                                <tr><td>CERT Polska</td><td>Phishpedia</td><td>0.5482</td><td>0.2621</td><td>0.2013</td><td><strong style="color: #f59e0b;">0.9845</strong></td></tr>
-                                <tr><td>CERT Polska</td><td>Proposed Stage-1 pHash</td><td><strong style="color: #22c55e;">0.5823</strong></td><td>0.1670</td><td>0.3668</td><td>0.2554</td></tr>
-                                <tr><td>VisualPhishNet (VP)</td><td>VisualPhishNet</td><td>0.3924</td><td>0.0047</td><td>0.0694</td><td>0.0037</td></tr>
-                                <tr><td>VisualPhishNet (VP)</td><td>Phishpedia</td><td>0.3782</td><td>0.3073</td><td>0.2569</td><td><strong style="color: #f59e0b;">0.9270</strong></td></tr>
-                                <tr><td>VisualPhishNet (VP)</td><td>Proposed Stage-1 pHash</td><td><strong style="color: #22c55e;">0.7009</strong></td><td>0.4111</td><td>0.5089</td><td>0.5679</td></tr>
-                                <tr><td>Phishpedia (PP)</td><td>VisualPhishNet</td><td>0.1003</td><td>0.0334</td><td>0.0111</td><td>1.0000</td></tr>
-                                <tr><td>Phishpedia (PP)</td><td>Phishpedia</td><td>0.7691</td><td>0.2894</td><td>0.7384</td><td>0.9154</td></tr>
-                                <tr><td>Phishpedia (PP)</td><td><strong>Proposed Hybrid Dual-Stage</strong></td><td><strong style="color: #22c55e;">0.9539</strong></td><td><strong>0.4111</strong></td><td><strong>0.7384</strong></td><td><strong style="color: #22c55e;">0.9845</strong></td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <!-- DOM GNN TAB -->
-            <section id="graph-tab" class="tab-page">
-                <div class="card-box tilt-3d mb-4">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <h2><i class="fa-solid fa-cube"></i> Interactive 3D DOM Graph Attention Network (GAT)</h2>
-                            <p>3D Holographic view of DOM elements, structural tree depth, and hidden cloaking node clusters (Drag to orbit 360°).</p>
-                        </div>
-                        <span class="badge badge-accent"><i class="fa-solid fa-eye"></i> 3D Graph Mode</span>
-                    </div>
-
-                    <div class="gnn-3d-container mt-3" style="position: relative; width: 100%; height: 380px; background: rgba(6, 9, 19, 0.8); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 14px; overflow: hidden;">
-                        <canvas id="gnn-3d-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
-                        <div style="position: absolute; bottom: 12px; left: 16px; font-size: 11px; color: #94a3b8; background: rgba(15, 23, 42, 0.85); padding: 6px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);">
-                            <i class="fa-solid fa-circle-info text-cyan"></i> Nodes: DOM Elements (Form, Script, Iframe, Input) | Edges: GAT Self-Attention Weights
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card-box tilt-3d">
-                    <h2><i class="fa-solid fa-diagram-project"></i> DOM Structural Graph Telemetry</h2>
-                    <p>PyTorch Graph Attention Network (GAT) analyzing HTML tree depth, hidden cloaking nodes, and external form handlers.</p>
-                    
-                    <div class="gnn-detail-grid">
-                        <div class="gnn-info-card tilt-3d">
-                            <i class="fa-solid fa-eye-slash icon-alert"></i>
-                            <h4>Hidden Cloaking Nodes</h4>
-                            <p id="gnn-hidden-count">0 Nodes Detected</p>
-                        </div>
-
-                        <div class="gnn-info-card tilt-3d">
-                            <i class="fa-solid fa-key icon-danger"></i>
-                            <h4>External Form Posting</h4>
-                            <p id="gnn-pwd-target">External Target Detected</p>
-                        </div>
-
-                        <div class="gnn-info-card tilt-3d">
-                            <i class="fa-solid fa-microchip icon-accent"></i>
-                            <h4>GNN Feature Embedding</h4>
-                            <p>64-Dimensional Vector Extracted</p>
+                        <div class="card-box">
+                            <h3><i class="fa-solid fa-brain"></i> Language-model API results</h3>
+                            <div id="llm-box"></div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- WHOIS & SSL TAB -->
-            <section id="whois-tab" class="tab-page">
+            <!-- COMPONENT STATUS TAB -->
+            <section id="status-tab" class="tab-page">
                 <div class="card-box">
-                    <h2><i class="fa-solid fa-lock"></i> WHOIS, DNS & SSL Certificate Intelligence</h2>
-                    <p>Extracts registrar age, privacy protection, DNS MX/SPF records, and TLS certificate authority parameters.</p>
-
-                    <div class="grid-2-col mt-4">
-                        <div class="intel-card">
-                            <h3><i class="fa-solid fa-id-card"></i> WHOIS Domain Metadata</h3>
-                            <div class="intel-row"><span>Registrar:</span> <strong id="whois-registrar">CheapDomains LLC</strong></div>
-                            <div class="intel-row"><span>Registration Age:</span> <strong id="whois-age">14 Days</strong></div>
-                            <div class="intel-row"><span>Days to Expiry:</span> <strong id="whois-expiry">30 Days</strong></div>
-                            <div class="intel-row"><span>Privacy Protection:</span> <strong id="whois-privacy">Active</strong></div>
-                        </div>
-
-                        <div class="intel-card">
-                            <h3><i class="fa-solid fa-shield-halved"></i> SSL Certificate & TLS</h3>
-                            <div class="intel-row"><span>Certificate Authority:</span> <strong id="ssl-ca">Untrusted / Let's Encrypt Free</strong></div>
-                            <div class="intel-row"><span>TLS Version:</span> <strong id="ssl-tls">TLSv1.0 (Deprecated)</strong></div>
-                            <div class="intel-row"><span>Signature Algorithm:</span> <strong id="ssl-sig">sha1WithRSAEncryption</strong></div>
-                            <div class="intel-row"><span>Validity State:</span> <strong class="text-danger" id="ssl-valid">Invalid / Expired</strong></div>
-                        </div>
+                    <h2><i class="fa-solid fa-list-check"></i> Component status</h2>
+                    <p class="status-note">Reported by <code>/dashboard/system</code>.</p>
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead><tr><th>Component</th><th>Status</th><th>Reason</th></tr></thead>
+                            <tbody id="components-tbody"></tbody>
+                        </table>
                     </div>
                 </div>
             </section>
 
-            <!-- KAGGLE DATASET TAB -->
-            <section id="dataset-tab" class="tab-page">
+            <!-- EVALUATION TAB -->
+            <section id="evaluation-tab" class="tab-page">
                 <div class="card-box">
-                    <h2><i class="fa-solid fa-database"></i> Unified Multimodal Dataset & Connected Screenshot Repositories</h2>
-                    <p>Equally merged samples across 4 Kaggle source streams + 6 connected screenshot dataset repositories (102,070 screenshots indexed).</p>
-
-                    <!-- Connected Screenshot Datasets Cards -->
-                    <div class="card-box mt-3" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 12px; padding: 20px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 15px;">
-                            <h3 style="color: #38bdf8; font-size: 1.1rem; margin: 0;"><i class="fa-solid fa-camera-retro"></i> Connected Official External Screenshot Repositories</h3>
-                            <button class="btn-preset action-preset" id="fetch-external-datasets-btn" style="background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 0.8rem;">
-                                <i class="fa-solid fa-cloud-arrow-down"></i> Trigger Live URL Connection & Fetch
-                            </button>
-                        </div>
-                        <div id="live-fetch-status-box" style="margin-bottom: 15px; font-size: 0.85rem; color: #a7f3d0;" class="hidden"></div>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
-                            
-                            <div style="background: rgba(30, 41, 59, 0.8); border: 1px solid #38bdf8; border-radius: 8px; padding: 15px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <strong style="color: #38bdf8; font-size: 0.95rem;">LNU-Phish Benchmark</strong>
-                                    <span class="badge badge-success" style="font-size: 0.7rem;"><i class="fa-solid fa-circle-check"></i> Connected</span>
-                                </div>
-                                <p style="font-size: 0.8rem; margin-top: 6px; color: #94a3b8;">20,000 Full-Page Screenshots, DOM Graphs & DNS Records</p>
-                                <a href="https://lnu-phish.github.io/" target="_blank" style="display: inline-block; margin-top: 10px; font-size: 0.75rem; color: #38bdf8; text-decoration: underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open LNU-Phish Portal</a>
-                            </div>
-
-                            <div style="background: rgba(30, 41, 59, 0.8); border: 1px solid #f59e0b; border-radius: 8px; padding: 15px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <strong style="color: #f59e0b; font-size: 0.95rem;">Phish360 Dataset</strong>
-                                    <span class="badge badge-success" style="font-size: 0.7rem;"><i class="fa-solid fa-circle-check"></i> Connected</span>
-                                </div>
-                                <p style="font-size: 0.8rem; margin-top: 6px; color: #94a3b8;">12,500 Multi-View 360° Screenshots & Logo BBoxes</p>
-                                <a href="https://web.cs.hacettepe.edu.tr/~selman/phish360-dataset/" target="_blank" style="display: inline-block; margin-top: 10px; font-size: 0.75rem; color: #f59e0b; text-decoration: underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open Phish360 Portal</a>
-                            </div>
-
-                            <div style="background: rgba(30, 41, 59, 0.8); border: 1px solid #a855f7; border-radius: 8px; padding: 15px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <strong style="color: #a855f7; font-size: 0.95rem;">Hugging Face Screenshots</strong>
-                                    <span class="badge badge-success" style="font-size: 0.7rem;"><i class="fa-solid fa-circle-check"></i> Connected</span>
-                                </div>
-                                <p style="font-size: 0.8rem; margin-top: 6px; color: #94a3b8;">25,000 High-Res 1080p & 224x224 RGB Tensors for ViT</p>
-                                <a href="https://huggingface.co/datasets/shresthsamyak/phishing-website-screenshots" target="_blank" style="display: inline-block; margin-top: 10px; font-size: 0.75rem; color: #a855f7; text-decoration: underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open Hugging Face Repo</a>
-                            </div>
-
-                        </div>
-                    </div>
-                    
-                    <div class="dataset-stats-cards mt-4" id="dataset-stats-cards">
-                        <div class="stat-card">
-                            <span class="stat-label">Total Merged Samples</span>
-                            <span class="stat-num" id="ds-total">10,000</span>
-                        </div>
-                        <div class="stat-card">
-                            <span class="stat-label">Test Accuracy</span>
-                            <span class="stat-num success" id="ds-acc">100.00%</span>
-                        </div>
-                        <div class="stat-card">
-                            <span class="stat-label">Test Precision</span>
-                            <span class="stat-num success" id="ds-prec">100.00%</span>
-                        </div>
-                        <div class="stat-card">
-                            <span class="stat-label">Test F1-Score</span>
-                            <span class="stat-num success" id="ds-f1">100.00%</span>
-                        </div>
-                    </div>
-
-                    <h3 class="mt-4">Dataset Feature Preview & Distributions</h3>
-                    <div class="table-wrapper">
-                        <table class="data-table" id="dataset-table">
-                            <thead>
-                                <tr>
-                                    <th>URL</th>
-                                    <th>Dataset Source Stream</th>
-                                    <th>Prefix/Suffix</th>
-                                    <th>SSL State</th>
-                                    <th>DOM Nodes</th>
-                                    <th>Label</th>
-                                </tr>
-                            </thead>
-                            <tbody id="dataset-tbody">
-                                <!-- Dynamic rows -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <!-- DATABASE & SCAN HISTORY TAB VIEW -->
-            <section id="database-tab" class="tab-content hidden">
-                <div class="card card-hero">
-                    <div class="card-header-flex">
-                        <div>
-                            <h2><i class="fa-solid fa-database text-accent"></i> Full SQLite Database Records</h2>
-                            <p class="subtitle">Live database table records directly from <code>phishguard_x.db</code></p>
-                        </div>
-                        <button id="refresh-db-btn" class="btn btn-secondary">
-                            <i class="fa-solid fa-rotate"></i> Refresh Database
-                        </button>
-                    </div>
-
-                    <h3 class="mt-4"><i class="fa-solid fa-users text-accent"></i> User Accounts Table (<code>users</code>)</h3>
-                    <div class="table-wrapper mb-4">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Username</th>
-                                    <th>Email</th>
-                                    <th>Role</th>
-                                    <th>Active</th>
-                                    <th>Created At</th>
-                                </tr>
-                            </thead>
-                            <tbody id="db-users-tbody">
-                                <!-- Dynamic user rows -->
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <h3 class="mt-4"><i class="fa-solid fa-shield-cat text-accent"></i> Scan Results Table (<code>scan_results</code>)</h3>
+                    <h2><i class="fa-solid fa-chart-column"></i> Evaluation, dataset and scan history</h2>
+                    <p class="status-note">Values appear here only when they come from generated evaluation artifacts or real records.</p>
                     <div class="table-wrapper">
                         <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Target URL</th>
-                                    <th>Verdict</th>
-                                    <th>Threat Score</th>
-                                    <th>Risk Level</th>
-                                    <th>Attack Category</th>
-                                    <th>Actions</th>
-                                    <th>Timestamp</th>
-                                </tr>
-                            </thead>
-                            <tbody id="db-scans-tbody">
-                                <!-- Dynamic scan rows -->
-                            </tbody>
+                            <thead><tr><th>Item</th><th>Status</th><th>Reason</th></tr></thead>
+                            <tbody id="evaluation-tbody"></tbody>
                         </table>
                     </div>
                 </div>
@@ -780,19 +149,6 @@ http://login.microsoftonline.security-auth-check.xyz/oauth2"></textarea>
         </main>
     </div>
 
-    <!-- MODEL INSPECTOR & COMPARISON MODAL -->
-    <div id="model-modal" class="modal-backdrop hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modal-title"><i class="fa-solid fa-microchip"></i> Model Execution Payload Inspector</h3>
-                <button id="modal-close-btn" class="modal-close"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="modal-body" id="modal-body">
-                <!-- Dynamic JSON payload & telemetry -->
-            </div>
-        </div>
-    </div>
-
-    <script src="/static/app.js?v=3.0"></script>
+    <script src="/static/app.js?v=4.0"></script>
 </body>
 </html>
