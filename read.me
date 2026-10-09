@@ -34,10 +34,24 @@ integrity rules the project follows, and the phase-by-phase roadmap.
 
 ### Crawler scope — what it does *not* do
 
-The Phase 0–2 crawler is intended for a single, human-initiated, on-demand scan of one URL. It
-**does not read or honour `robots.txt`**, applies **no crawl-delay or rate limiting**, does not
-render JavaScript, and does not collect screenshots or SSL certificate metadata. Robots handling and
-rate limiting would have to be added before any unattended or bulk crawling.
+The scan crawler (`crawler/fetcher.py`, used by `/api/v1/scan`) is intended for a single,
+human-initiated, on-demand scan of one URL. It **does not read or honour `robots.txt`**, applies
+**no crawl-delay or rate limiting**, does not render JavaScript, and does not collect screenshots or
+SSL certificate metadata. It would need robots handling and rate limiting before any unattended or
+bulk use.
+
+The Phase 3 dataset collector (`dataset/`, run separately from the scan API) behaves differently,
+within these stated limits:
+
+- It checks `robots.txt` for the **source host** of each URL before fetching (`dataset/robots.py`).
+  Redirect-target hosts are not checked, a `Crawl-delay` directive is not honoured, and if
+  `robots.txt` cannot be retrieved (timeout or an HTTP error) the fetch proceeds ("fail-open").
+- It rate-limits per hostname, not per hosting provider (`dataset/orchestrator.py`; defaults: 5
+  concurrent requests and a 2.0 s minimum gap between request starts to the same host, configurable
+  in `config.py`).
+- It records TLS certificate metadata through a separate probe (`dataset/tls_probe.py`) that
+  deliberately does not validate certificates.
+- It issues GET requests only, and does not render JavaScript or collect screenshots.
 
 ## What is NOT implemented (reported as `unavailable` / HTTP 501)
 
@@ -59,8 +73,10 @@ rate limiting would have to be added before any unattended or bulk crawling.
 - **Explainability, scan history, authentication** and **dataset export/benchmark** endpoints.
 - **Evaluation.** No model has been evaluated on real held-out data.
 - **Dataset.** The committed CSV files under `data/` contain label-conditional random features and
-  **must not be used for training or evaluation** (`CLAUDE.md` section 6). Real data collection is
-  planned for Phase 3 and is not part of this branch.
+  **must not be used for training or evaluation** (`CLAUDE.md` section 6). The Phase 3 collection
+  pipeline exists in `dataset/` (code only; design in `PHASE3_DATASET_PLAN.md`), but **no collected
+  data is stored in this repository**: the capture manifest, HTML snapshots, selection files, split
+  lists and feed digests are generated locally and are kept out of Git (see `.gitignore`).
 
 The legacy simulated modules (`vision_model.py`, `nlp_transformer.py`, `classical_ensemble.py`,
 `collectors.py`, `mlops_service.py`, `security.py`, ...) are still present in the repository pending
@@ -160,5 +176,7 @@ results**, not this project's, and none are reproduced or claimed here.
 
 ## License
 
-Earlier drafts of this README declared the MIT License. No `LICENSE` file is currently present in
-the repository, so the licence still needs to be confirmed and added by the team.
+The repository includes an MIT `LICENSE` file; its copyright holders, year and wording are still
+pending confirmation by the team. The licence covers this project's code. Third-party data collected
+by the Phase 3 pipeline (PhishTank, OpenPhish, Tranco) remains subject to its sources' own terms and
+is not redistributed here.
