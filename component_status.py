@@ -37,9 +37,10 @@ REASONS: Dict[str, str] = {
         "they would not produce a valid phishing probability if used. A separate, real GNN "
         "forward pass is active in the live /demo pipeline (analysis_pipeline.py), using a "
         "checkpoint (gnn_model_demo.pt) retrained on real Phase 3 webpage DOM graphs — but on "
-        "only 12 real training samples, so that output is for demonstration only and does not "
-        "establish generalization or production accuracy. Open /demo to exercise it live; this "
-        "Scanner tab does not yet call it."
+        "only 12 real training samples (a HISTORICAL checkpoint), so that output is for "
+        "demonstration only and does not establish generalization or production accuracy; it has "
+        "been observed to give a very high signal to a harmless local test page. Open /demo to "
+        "exercise it live; this Scanner tab does not yet call it."
     ),
     "visual": (
         "Screenshot, ViT, Phishpedia, VisualPhishNet, pHash/FAISS and OCR outputs were simulated "
@@ -64,11 +65,12 @@ REASONS: Dict[str, str] = {
     "explanation": "No genuine explanation method is implemented yet (planned: Phase 9).",
     "evaluation": (
         "No model has been evaluated on real held-out data using this project's formal evaluation "
-        "pipeline (planned: Phase 10). Raw training/validation-loss observations from the small-"
-        "sample GNN retrain (train n=12, val n=14, test n=1 — see gnn_model_demo_metrics.json) are "
-        "recorded for transparency in the /demo pipeline, but these are training observations only, "
-        "not a held-out evaluation, and must never be cited as accuracy, precision, recall, F1, "
-        "ROC-AUC or any validated performance metric."
+        "pipeline (planned: Phase 10). HISTORICAL: raw observations from the one-off small-sample "
+        "GNN retrain (train n=12, val n=14, test n=1 — see gnn_model_demo_metrics.json) are kept "
+        "unchanged for transparency, but these are training observations only, not a held-out "
+        "evaluation, and must never be cited as accuracy, precision, recall, F1, ROC-AUC or any "
+        "validated performance metric, nor combined with any future evaluation on a later dataset "
+        "version."
     ),
     "dataset": (
         "A real Phase 3 dataset has been collected (dataset version v5, stored locally in "
@@ -76,7 +78,10 @@ REASONS: Dict[str, str] = {
         "(phishing) and Tranco (benign) with real crawled HTML snapshots. Per its generated dataset "
         "card (DATASET_CARD.md): 679 eligible samples (331 phishing, 348 benign), domain-grouped "
         "splits train=408 (199/209), val=135 (66/69), test=136 (66/70), with zero cross-split "
-        "domain leakage and zero label conflicts. Dataset collection is complete, but no model has "
+        "domain leakage and zero label conflicts. A later snapshot-integrity re-check found that one "
+        "of those rows (in the train split) no longer verifies, so the integrity-verified pool is 678 "
+        "(330 phishing, 348 benign); that row has not been replaced or reassigned, and the card and "
+        "the frozen v5 split files are unchanged. Dataset collection is complete, but no model has "
         "yet been retrained or evaluated on it: the GNN checkpoint used in /demo was trained "
         "earlier on only 12 samples from the original pilot. This endpoint does not yet compute "
         "live statistics from the dataset. The previously committed CSV files (data/*.csv) remain "

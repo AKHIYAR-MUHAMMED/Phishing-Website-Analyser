@@ -79,17 +79,17 @@ use `/demo`.)
    is configured.
 10. **Open "Technical Details"** (collapsible) — the full raw JSON API response, for anyone who
     wants to see exactly what the backend actually returned.
-11. **Run a second URL** (e.g. one you know locally, or `https://posototo.ink`) to show the
-    output genuinely changes with real input — different node/edge counts, different scores,
+11. **Run a second URL** (e.g. another public page you know, or a static HTML page you serve
+    yourself with `python -m http.server`) to show the output genuinely changes with real input — different node/edge counts, different scores,
     different evidence.
 
 ---
 
 ## 5. What can be demonstrated
 
-Any real, publicly reachable URL. Two known-good examples already exercised in this project:
+Any real, publicly reachable URL, or a static HTML page you serve locally. One known-good example
+already exercised in this project:
 - `https://github.com` — real large page, low risk score
-- `https://posototo.ink` — a real site from the Phase 3 pilot dataset, higher risk score
 
 Avoid URLs that are offline or blocked by the crawler's timeout — see `TROUBLESHOOTING.md`.
 

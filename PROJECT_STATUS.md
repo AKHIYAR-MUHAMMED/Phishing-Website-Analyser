@@ -31,11 +31,15 @@ TROUBLESHOOTING.md, VIVA_QA.md, PROJECT_STATUS.md, QUICK_REFERENCE.md   (documen
 ## Dataset (Phase 3)
 
 Collection complete (dataset version v5, stored locally in `phishguard-phase3-pilot/`, not in this
-repository): 679 eligible samples (331 phishing, 348 benign); train 408 (199/209), validation 135
-(66/69), test 136 (66/70); zero cross-split domain leakage, zero label conflicts. Off-machine backup
-is **not** verified. **No model has been retrained or evaluated on this dataset yet.** The
-snapshot-integrity fix used for the final collection run lives on the separate
-`phase-3-dataset-scale` branch, not on `demo-sprint`.
+repository). The generated dataset card records 679 eligible samples (331 phishing, 348 benign);
+train 408 (199/209), validation 135 (66/69), test 136 (66/70); zero cross-split domain leakage,
+zero label conflicts. A later snapshot-integrity re-check found that the stored HTML snapshot of
+one of those rows (in the train split) no longer verifies and is absent from the backup, so the
+integrity-verified pool is **678** rows (330 phishing, 348 benign; train 407, validation 135, test
+136). That row has not been replaced or reassigned, and the card and the frozen v5 split files are
+unchanged. Off-machine backup is **not** verified. **No model has been retrained or evaluated on
+this dataset yet.** The snapshot-integrity fix used for the final collection run is on `main` (PR
+#5, Phase 3 dataset scale).
 
 ## Tests
 
@@ -51,8 +55,10 @@ bound. The orchestrator code and the test are unchanged from `c9e3340`, where th
 Verified live and working at `http://localhost:8000/demo`:
 - `github.com` → Benign, fused 7.8%, GNN 0.01%, 200 DOM nodes/398 edges (matches the original
   pre-experiment baseline exactly)
-- `posototo.ink` → real, distinct output (fused 36.7%, GNN 86.66%) — confirms genuinely
-  different real results for different real input
+- a harmless static local test page (a form and a password field, served from `127.0.0.1`;
+  scratch smoke test 2026-10-09) → real, distinct output (fused 34.9% labelled Benign, GNN
+  99.05%, URL signal 5.6%, semantic heuristic 0.0%). The very high GNN signal on a harmless page
+  is a reliability weakness of the 12-sample checkpoint, not a detection.
 - No browser console errors
 
 ## Main implemented components
@@ -68,7 +74,10 @@ Verified live and working at `http://localhost:8000/demo`:
 
 ## Known limitations
 
-- GNN trained on only 12 real labeled samples — no generalization claim
+- GNN trained on only 12 real labeled samples — no generalization claim; it can give a very high
+  signal to a harmless page (see Demo status)
+- `gnn_model_demo_metrics.json` is HISTORICAL (train n=12, val n=14, test n=1); it is not an
+  evaluation and is never to be combined with a future evaluation on a later dataset version
 - No LLM integrated (disclosed heuristic substitute)
 - Fusion is an unweighted average, not a trained fusion model
 - DOM graph capped at 200 elements per page (older, simpler cap — see next section)

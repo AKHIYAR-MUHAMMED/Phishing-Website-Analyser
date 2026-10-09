@@ -1,4 +1,5 @@
 {
+  "STATUS": "HISTORICAL. Recorded results of a single small-sample training run (checkpoint gnn_model_demo.pt, N=12 training samples). All values in this file are preserved unchanged. They are training/validation/test observations of that one run, not an independent evaluation and not evidence of generalization, and they must be kept separate from, and never aggregated with, any future evaluation on a later dataset version.",
   "HONESTY_NOTE": "Trained on N=12 real webpage DOM graphs from the Phase 3 pilot collection (8 phishing, 4 benign) using train_gnn_demo.py, not the synthetic 15-node template train_gnn.py used. This dataset is far too small to support a generalization claim. Metrics below are reported exactly as computed, for demo transparency only, and must never be cited as validated model performance.",
   "seed": 42,
   "epochs": 30,

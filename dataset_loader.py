@@ -275,12 +275,9 @@ def extract_url_lexical_features(url: str) -> Dict[str, float]:
     url_len_score = 1.0 if url_len > 75 else (0.5 if url_len >= 54 else 0.0)
 
     # 3. Shortening Service
-    # GNN reliability repair, Bug A: the previous check was `re.search(r"...|t\.co|...", url)`,
-    # a plain substring match against the WHOLE url string. "t.co" (a real shortener domain)
-    # matched inside "microsoft.**com**" via "...sof**t.co**m" -- a false positive with no
-    # relation to the actual host. Fixed to compare the URL's own hostname (already parsed
-    # above as `domain`, with port/www. stripped) against the real shortener domains, either
-    # exactly or as a subdomain -- never a raw substring of the full URL string.
+    # Match the URL's host, not the whole URL string. A raw substring search let the shortener
+    # "t.co" match inside "microsoft.com" ("...sof[t.co]m"), a false positive. The host (port and
+    # a leading "www." removed) must equal a listed shortener domain or be a subdomain of one.
     _SHORTENER_DOMAINS = (
         "bit.ly", "goo.gl", "tinyurl.com", "tiny.cc", "is.gd", "cli.gs", "yfrog.com",
         "ow.ly", "t.co", "bit.do", "short.to", "buff.ly", "adf.ly",

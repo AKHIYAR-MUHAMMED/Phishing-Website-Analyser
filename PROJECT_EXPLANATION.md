@@ -126,8 +126,10 @@ crawl metadata, and collapsible transparency/raw-JSON sections.
 
 ## Dataset/data pipeline
 
-Phase 3 real-data collection is complete: 679 eligible samples (331 phishing, 348 benign) from
-PhishTank/OpenPhish (phishing) and Tranco (benign), crawled for real HTML snapshots and split by
+Phase 3 real-data collection is complete: 679 eligible samples recorded on the generated dataset
+card (331 phishing, 348 benign; 678 after a later snapshot-integrity re-check, see
+`PROJECT_STATUS.md`) from PhishTank/OpenPhish (phishing) and Tranco (benign), crawled for real
+HTML snapshots and split by
 registered domain into train 408 (199/209), validation 135 (66/69) and test 136 (66/70), with zero
 cross-split domain leakage and zero label conflicts (generated dataset card, v5; the dataset itself
 is stored locally in `phishguard-phase3-pilot/`, not in this repository).
@@ -135,8 +137,8 @@ is stored locally in `phishguard-phase3-pilot/`, not in this repository).
 **The current `gnn_model_demo.pt` checkpoint was NOT trained on this dataset.** It was trained
 earlier on the small original pilot: train=12 (8 phishing/4 benign), val=14, test=1 samples (see
 `gnn_model_demo_metrics.json`). This is disclosed everywhere as far too small to support a
-generalization claim. No model has been retrained or formally evaluated on the 679-sample dataset
-yet.
+generalization claim. These recorded results are HISTORICAL and are not an evaluation. No model
+has been retrained or formally evaluated on the Phase 3 dataset yet.
 
 ## Testing
 
@@ -156,7 +158,7 @@ earlier phases. Current full suite: see `PROJECT_STATUS.md` for the exact pass c
 
 ## Future work
 
-Retrain the GNN on the completed 679-sample dataset; integrate one real language model for
+Retrain the GNN on the integrity-verified Phase 3 dataset; integrate one real language model for
 semantics; train an actual fusion model on held-out validation data; run a full, honest
 evaluation (accuracy, precision, recall, F1, ROC-AUC, MCC, confusion matrix) on the held-out
 domain-grouped test split; add GNNExplainer-based subgraph explanations.

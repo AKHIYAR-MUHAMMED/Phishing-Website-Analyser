@@ -1,9 +1,8 @@
 """
-GNN reliability repair, Bug A regression tests: extract_url_lexical_features()'s
-shortening_service check previously matched raw substrings of the whole URL string, so the
-real shortener "t.co" matched inside "microsoft.**com**". Fixed to compare the URL's own
-hostname against real shortener domains (exact or subdomain match), never a substring of the
-full URL.
+Regression tests for extract_url_lexical_features()'s shortening_service check. It used to
+match raw substrings of the whole URL string, so the shortener "t.co" matched inside
+"microsoft.com". It now compares the URL's host against known shortener domains (exact or
+subdomain match).
 """
 
 from dataset_loader import extract_url_lexical_features
@@ -25,9 +24,8 @@ def test_shortening_service_detects_a_subdomain_of_a_real_shortener():
 
 
 def test_shortening_service_does_not_match_an_unrelated_domain_containing_the_substring():
-    # "example-t.com" and "shorttoowner.com" both contain shortener-like substrings
-    # ("t.co" is NOT literally present here, but this guards the general no-substring-match
-    # intent for any host that merely resembles a shortener name).
+    # "example-t.com" contains the substring "t.co" (the old bug) and "shorttoowner.com" only
+    # resembles "short.to"; neither host is a shortener.
     assert extract_url_lexical_features("https://example-t.com")["shortening_service"] == 0.0
     assert extract_url_lexical_features("https://shorttoowner.com")["shortening_service"] == 0.0
 

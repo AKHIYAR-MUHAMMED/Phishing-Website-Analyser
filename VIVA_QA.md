@@ -59,8 +59,8 @@ an explicit error status; nothing is faked if the crawl fails.
 
 **Q: What dataset is used?**
 A: A real Phase 3 dataset collected from PhishTank and OpenPhish (phishing URLs) and Tranco
-(benign URLs), with real crawled HTML snapshots: 679 eligible samples (331 phishing / 348
-benign), split by registered domain into train 408 / validation 135 / test 136, with zero
+(benign URLs), with real crawled HTML snapshots: 679 eligible samples recorded on the generated
+card (331 phishing / 348 benign; 678 integrity-verified after a later re-check), split by registered domain into train 408 / validation 135 / test 136, with zero
 cross-split domain leakage and zero label conflicts (per the generated dataset card, v5). The GNN
 checkpoint currently in use was NOT trained on this dataset — it was trained earlier on the small
 original pilot: 12 samples for training (8 phishing / 4 benign), 14 for validation, 1 for test.
@@ -82,15 +82,15 @@ A: Training set of only 12 real samples; no LLM integrated (heuristic substitute
 fusion is an unweighted average, not trained; DOM graph capped at 200 elements per page; no
 statistically meaningful accuracy claim.
 
-**Q: If the dataset has 679 samples, why was the GNN trained on only 12?**
+**Q: If the dataset has hundreds of samples, why was the GNN trained on only 12?**
 A: The 12-sample GNN checkpoint comes from the earlier controlled pilot, run to validate the
 collection pipeline itself (feeds, crawling, snapshot integrity, dedup). Phase 3 collection has
-since been completed at 679 eligible samples, but no model has been retrained or evaluated on it
+since been completed (679 eligible samples recorded, 678 integrity-verified), but no model has been retrained or evaluated on it
 yet. An earlier retrain attempt on a still-tiny sample made live behaviour worse and was
 deliberately not adopted, so the retrain is deferred until it can be done properly on the larger
 dataset.
 
-**Q: What would you do with the 679-sample dataset?**
+**Q: What would you do with the completed dataset?**
 A: Retrain the GNN with proper regularization and validation-based early stopping, train a real
 fusion model, and run a full accuracy/precision/recall/F1/ROC-AUC/MCC evaluation on the held-out,
 domain-grouped test split. None of this has been done yet.
