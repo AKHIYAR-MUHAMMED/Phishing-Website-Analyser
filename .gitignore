@@ -28,6 +28,20 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Phase 3 dataset collection (PHASE3_DATASET_PLAN.md section 11). Generated dataset artifacts stay
+# local-only and are NOT committed: raw feed downloads and raw HTML snapshots (data/raw/), plus the
+# capture manifest, derived selection files, split lists and feed digests below. The manifest and
+# the files derived from it store raw feed URLs, which can embed victim identifiers (e-mail
+# addresses, session or token values); committing them is suspended until URL privacy has been
+# addressed (see the amendment at the top of PHASE3_DATASET_PLAN.md).
+# data/DATASET_CARD.md, data/backups/*.sha256 and data/tranco_used_ranks.json contain no crawled
+# URLs and are intentionally not ignored.
+data/raw/
+data/manifest.csv
+data/derived/
+data/splits/
+data/feed_digests/
+
 # Generated Slide Images
 slide_images/
 cv_slide_images/

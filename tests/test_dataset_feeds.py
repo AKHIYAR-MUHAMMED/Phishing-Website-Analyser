@@ -1,0 +1,53 @@
+"""
+Section 21.1 item 2: feed digests are generated and secrets are redacted. fetch_feed_bytes is
+only ever exercised against the local test server here.
+"""
+
+import asyncio
+import hashlib
+
+import httpx
+import pytest
+
+from dataset.feeds import compute_feed_digest, fetch_feed_bytes
+from local_server import LOGIN_PAGE_HTML
+
+
+def test_compute_feed_digest_redacts_secret_and_hashes_correctly():
+    raw = b"url,label\nhttp://x.example,1\n"
+    endpoint = "http://data.phishtank.com/data/online-valid.csv?app_key=SuperSecretValue123456"
+    digest = compute_feed_digest("phishtank", endpoint, raw, row_count=1)
+    assert "SuperSecretValue123456" not in digest["endpoint"]
+    assert digest["sha256"] == hashlib.sha256(raw).hexdigest()
+    assert digest["row_count"] == 1
+    assert digest["source"] == "phishtank"
+    assert digest["timestamp"]
+
+
+def test_fetch_feed_bytes_against_local_server(http_server):
+    body = asyncio.run(fetch_feed_bytes(http_server.url("/ok")))
+    assert body  # LOGIN_PAGE_HTML content
+
+
+def test_fetch_feed_bytes_raises_on_http_error(http_server):
+    with pytest.raises(Exception):
+        asyncio.run(fetch_feed_bytes(http_server.url("/404")))
+
+
+def test_fetch_feed_bytes_blocks_real_host():
+    with pytest.raises(Exception):
+        asyncio.run(fetch_feed_bytes("https://example.com/feed.txt"))
+
+
+def test_fetch_feed_bytes_follows_redirects(http_server):
+    """Real-feed format probe (2026-09-29): both OpenPhish and Tranco's real endpoints respond
+    with a redirect to their actual content. This asserts the fetcher follows it and returns
+    the REDIRECT TARGET's body, not the tiny redirect-stub page (/redirect-a -> /redirect-b ->
+    /ok, two hops, well within the default redirect limit)."""
+    body = asyncio.run(fetch_feed_bytes(http_server.url("/redirect-a")))
+    assert body == LOGIN_PAGE_HTML
+
+
+def test_fetch_feed_bytes_raises_on_a_redirect_loop(http_server):
+    with pytest.raises(httpx.TooManyRedirects):
+        asyncio.run(fetch_feed_bytes(http_server.url("/loop"), max_redirects=3))
