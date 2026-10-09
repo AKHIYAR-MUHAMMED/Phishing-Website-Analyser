@@ -1,12 +1,30 @@
-# Phase 3 — Dataset Collection Plan (v2 — approved design, not yet implemented)
+# Phase 3 — Dataset Collection Plan (v2 — approved design; since implemented, see "Since approval" below)
 
-> **Status: PLAN ONLY. Nothing in this document has been executed.** No URL has been fetched,
+> **Historical status, as of approval of this v2 plan (see "Since approval" below): PLAN ONLY.
+> Nothing in this document has been executed.** No URL has been fetched,
 > no dataset has been downloaded, no file under `data/raw/` exists yet. `requirements.txt`,
 > `.gitignore` and `crawler/fetcher.py` are unmodified. This revision incorporates an
 > independent technical review of v1 (Freebuff). All 14 corrections below, and their listed
 > resolutions, were approved by the team (see **Approved decisions** at the end) — approval
 > covers the *design*, not execution; nothing is implemented, downloaded, or crawled by this
 > document.
+
+> **Since approval.** The design has been implemented (`dataset/`, with matching changes to
+> `config.py`, `requirements.txt`, `.gitignore` and `crawler/fetcher.py`), and real collection runs
+> have been performed (a pilot and five scaled versions, v1-v5, between 2026-09-29 and 2026-10-01).
+> The collected data, manifest and generated dataset card are kept outside Git. The sections below
+> were not rewritten to reflect this; they describe the design as approved, and later amendments
+> are marked.
+
+> **Amendment — committing dataset artifacts is suspended.** Wherever this plan proposes committing
+> `data/manifest.csv`, `data/derived/selection_v*.csv`, `data/splits/`, `data/feed_digests/`, raw or
+> normalized crawled URLs, or any other artifact that contains crawled URLs (including the
+> "`.gitignore` / commit decisions" bullet in section 11), that proposal is **suspended**. Real feed
+> URLs can embed victim identifiers (e-mail addresses, session or token values), and neither the
+> manifest nor the files derived from it redact them. These artifacts are now `.gitignore`d and must
+> stay uncommitted until URL privacy has been addressed and reviewed. `data/DATASET_CARD.md` and
+> `data/backups/*.sha256` contain no crawled URLs and are unaffected. The rest of this document is
+> the unchanged v2 design.
 
 Branch: `phase-3-dataset`, created from `phase-2-crawler` at commit `98cefb8`. v1 of this plan
 was commit `c6a04ed`; this revision (v2) replaces it, same branch, no other file touched.
@@ -396,7 +414,8 @@ data/
 - **`.gitignore` / commit decisions unchanged from v1's proposal:** `data/raw/` stays
   `.gitignore`d (not applied yet — still a proposal); `data/manifest.csv`, `data/derived/
   selection_v*.csv`, `data/splits/`, `data/feed_digests/`, `data/backups/*.sha256` and
-  `data/DATASET_CARD.md` are proposed as committed artifacts.
+  `data/DATASET_CARD.md` are proposed as committed artifacts. **[SUSPENDED for the manifest, derived
+  selections, splits and feed digests — see the amendment at the top of this document.]**
 - `[APPROVED — decision 10]` **Out-of-band backup for `data/raw/html/` is mandatory.** This
   directory is `.gitignore`d and lives on a single machine, yet the phishing snapshots inside it
   are the *only* irreplaceable artifact this project produces — live pages vanish from the web

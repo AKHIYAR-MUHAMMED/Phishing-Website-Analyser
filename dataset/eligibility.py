@@ -12,13 +12,16 @@ manifest.find_prior_ok_row() uses for the cross-run "already_collected" decision
 a URL is only skipped on a later run if a prior attempt already cleared this row-level bar.
 """
 
-from typing import Any, Dict
+import hashlib
+from pathlib import Path
+from typing import Any, Dict, Union
 
 ELIGIBILITY_PREDICATE_DESCRIPTION = (
     "eligible = crawl_status == \"ok\" AND 200 <= http_status < 300 AND the decoded HTML is "
     "non-empty AND content_type is HTML-like AND this row is not a duplicate of another row "
     "AND its registered domain carries no label conflict AND its final domain does not "
-    "mismatch its source domain."
+    "mismatch its source domain AND its snapshot file still exists on disk with content "
+    "matching the manifest's recorded hash."
 )
 
 
@@ -44,14 +47,37 @@ def row_intrinsic_ok(row: Dict[str, Any]) -> bool:
     return True
 
 
+def snapshot_integrity_ok(row: Dict[str, Any], raw_html_dir: Union[str, Path]) -> bool:
+    """Verifies the row's snapshot file still exists on disk and its content still matches the
+    manifest's recorded html_sha256 — the "manifest entry -> valid snapshot -> matching checksum"
+    chain a real pilot run broke: a row's html_snapshot_path can be a truthy string in the
+    manifest (set once, correctly, at capture time) while the underlying file is later lost
+    (disk cleanup, moved pilot directory, manual deletion) with nothing re-checking it before the
+    row is carried into a later dataset version's splits. Only meaningful for rows that already
+    pass row_intrinsic_ok (a row without a snapshot path is already excluded there); callers
+    should check that first."""
+    snapshot_path = Path(raw_html_dir) / Path(row["html_snapshot_path"]).name
+    try:
+        with open(snapshot_path, "rb") as f:
+            actual_sha256 = hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return False
+    return actual_sha256 == row.get("html_sha256")
+
+
 def full_eligible(
     row_intrinsic: bool,
     is_duplicate: bool,
     label_conflict: bool,
     domain_redirect_mismatch: bool,
+    snapshot_integrity_failed: bool = False,
 ) -> bool:
     """The complete section-16 predicate, given the pool-level flags computed in selection.py.
     The result is stored directly as the "eligible" column in a derived-selection-artifact row
     (section 12b) — there is no separate stored copy of row_intrinsic to avoid a second,
-    divergeable notion of eligibility."""
-    return bool(row_intrinsic) and not is_duplicate and not label_conflict and not domain_redirect_mismatch
+    divergeable notion of eligibility. snapshot_integrity_failed defaults to False so existing
+    callers that only check manifest-recorded facts (not disk state) are unaffected."""
+    return (
+        bool(row_intrinsic) and not is_duplicate and not label_conflict
+        and not domain_redirect_mismatch and not snapshot_integrity_failed
+    )

@@ -124,3 +124,37 @@ def test_ineligible_rows_are_still_recorded_with_no_split():
     assert len(selection) == 1
     assert selection[0]["eligible"] is False
     assert selection[0]["split"] == ""
+
+
+def test_row_with_vanished_snapshot_file_is_excluded_when_raw_html_dir_given(tmp_path):
+    # Regression for the real pilot bug: a manifest row with a correct, non-empty
+    # html_snapshot_path whose underlying file no longer exists on disk must not be eligible,
+    # and must not silently remain in the modelling pool.
+    content = b"<html>ok</html>"
+    import hashlib
+    digest = hashlib.sha256(content).hexdigest()
+    present = _row("http://good.example/", "good.example", 1, "2026-01-01", digest)
+    present["html_snapshot_path"] = f"data/raw/html/{digest}.html"
+    (tmp_path / f"{digest}.html").write_bytes(content)
+
+    vanished = _row("http://gone.example/", "gone.example", 0, "2026-01-01", "GONEHASH")
+    vanished["html_snapshot_path"] = "data/raw/html/GONEHASH.html"
+    # Deliberately never write GONEHASH.html — simulates a snapshot lost after capture.
+
+    selection = build_selection([present, vanished], None, "v1", raw_html_dir=tmp_path)
+    by_url = {r["normalized_url"]: r for r in selection}
+
+    assert by_url["http://good.example/"]["eligible"] is True
+    assert by_url["http://good.example/"]["snapshot_integrity_failed"] is False
+
+    assert by_url["http://gone.example/"]["eligible"] is False
+    assert by_url["http://gone.example/"]["snapshot_integrity_failed"] is True
+
+
+def test_raw_html_dir_omitted_preserves_prior_behaviour():
+    # Without raw_html_dir, no disk check runs — snapshot_integrity_failed is always False, and
+    # eligibility matches the pre-fix behaviour exactly (back-compat for existing callers/tests).
+    row = _row("http://x.example/", "x.example", 1, "2026-01-01", "H1")
+    selection = build_selection([row], None, "v1")
+    assert selection[0]["snapshot_integrity_failed"] is False
+    assert selection[0]["eligible"] is True

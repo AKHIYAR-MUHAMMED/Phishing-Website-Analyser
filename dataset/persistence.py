@@ -54,7 +54,10 @@ def load_selection(path: Union[str, Path]) -> List[Dict[str, Any]]:
         rows = []
         for raw in csv.DictReader(f):
             row = dict(raw)
-            for bool_col in ("eligible", "cross_label_duplicate", "label_conflict", "domain_redirect_mismatch"):
+            for bool_col in (
+                "eligible", "cross_label_duplicate", "label_conflict", "domain_redirect_mismatch",
+                "snapshot_integrity_failed",
+            ):
                 row[bool_col] = str(row.get(bool_col, "")).strip().lower() == "true"
             rows.append(row)
         return rows

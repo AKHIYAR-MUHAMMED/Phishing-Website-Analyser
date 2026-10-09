@@ -452,7 +452,9 @@ async def run_collection(
     previous_selection_rows = (
         persistence.load_selection(previous_selection_path) if previous_selection_path else []
     )
-    selection_rows = build_selection(full_manifest_rows, previous_selection_rows, version, seed=seed)
+    selection_rows = build_selection(
+        full_manifest_rows, previous_selection_rows, version, seed=seed, raw_html_dir=raw_html_dir,
+    )
 
     selection_path = persistence.write_selection(selection_rows, version, derived_dir)
     split_paths = persistence.write_splits(selection_rows, splits_dir)
