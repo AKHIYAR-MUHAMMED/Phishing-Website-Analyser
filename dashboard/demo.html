@@ -251,8 +251,11 @@
   .pl-step.active .pl-dot::after { content:''; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); animation: pulse 1s ease-in-out infinite; }
   .pl-step.done .pl-dot { background: var(--benign); border-color: var(--benign); color: #06170f; font-weight: 800; }
   .pl-step.done .pl-dot::after { content: none; }
+  .pl-step.failed .pl-dot { background: var(--phish); border-color: var(--phish); color: #1a0509; font-weight: 800; }
+  .pl-step.skipped .pl-dot { background: var(--bg-elevated); border-style: dashed; color: var(--text-faint); }
   .pl-label { font-size: 12.5px; color: var(--text-faint); padding-top: 3px; transition: color 0.2s; }
-  .pl-step.active .pl-label, .pl-step.done .pl-label { color: var(--text); font-weight: 600; }
+  .pl-step.active .pl-label, .pl-step.done .pl-label, .pl-step.failed .pl-label { color: var(--text); font-weight: 600; }
+  .pl-sub { font-size: 11px; font-weight: 400; color: var(--text-faint); margin-top: 1px; }
   .pl-note { font-size: 11.5px; color: var(--text-faint); margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--border-soft); min-height: 15px; }
 
   .timing-area { grid-area: timing; display: none; }
@@ -516,6 +519,7 @@
 </main>
 
 <script>
+// <timeline-logic>
 const STAGES = [
   {key:'crawl', label:'Website Crawl', note:'Fetching the live page…'},
   {key:'process', label:'URL/HTML Processing', note:'Reading the URL and page structure…'},
@@ -526,15 +530,50 @@ const STAGES = [
   {key:'result', label:'Result', note:'Finalizing the verdict…'},
 ];
 
-function renderPipelineVertical(activeIdx, doneAll) {
-  const list = document.getElementById('pl-list');
-  list.innerHTML = STAGES.map((s, i) => {
+// Real outcome of each stage, derived ONLY from what the API response contains: a stage is "done"
+// when its output is present and usable, "failed" when the crawl did not retrieve the target page,
+// and "skipped" when it did not run. Nothing is marked complete just because a response arrived,
+// and a placeholder output (status "unavailable"/"error") does not count as the stage having run.
+function stageOutcomes(data) {
+  const c = data.components || {};
+  const usable = (o) => !!o && typeof o === 'object' && o.status !== 'unavailable' && o.status !== 'error';
+  const crawl = data.crawl || {};
+  const httpError = Number.isInteger(crawl.http_status) && crawl.http_status >= 400;
+  const ran = (cond, note) => cond ? {state: 'done'} : {state: 'skipped', note: note || 'Not run'};
+  return {
+    crawl: (crawl.status === 'ok' && !httpError)
+      ? {state: 'done'}
+      : {state: 'failed', note: httpError ? `Server returned HTTP ${crawl.http_status}` : 'Crawl did not complete'},
+    process: ran(usable(c.url_lexical)),
+    graph: ran(usable(c.gnn) && !!c.gnn.graph_stats),
+    gnn: ran(usable(c.gnn) && typeof c.gnn.threat_score === 'number' && Number.isFinite(c.gnn.threat_score)),
+    semantic: ran(usable(c.semantic)),
+    fusion: ran(usable(data.fusion)),
+    result: ran(data.verdict === 'benign' || data.verdict === 'phishing', 'Unavailable'),
+  };
+}
+
+// Timeline markup. While the request is in flight (outcomes omitted) steps are only "active" or
+// pending; once the real response is in, each step shows its real outcome (outcomes given).
+function pipelineStepsHtml(activeIdx, doneAll, outcomes) {
+  return STAGES.map((s, i) => {
     let cls = '';
-    if (doneAll) cls = 'done';
+    let sub = '';
+    if (outcomes) {
+      const o = outcomes[s.key];
+      cls = o.state;
+      if (o.note) sub = `<div class="pl-sub">${o.note}</div>`;
+    } else if (doneAll) cls = 'done';
     else if (i < activeIdx) cls = 'done';
     else if (i === activeIdx) cls = 'active';
-    return `<div class="pl-step ${cls}"><div class="pl-dot">${cls==='done' ? '✓' : ''}</div><div class="pl-label">${s.label}</div></div>`;
+    const mark = cls === 'done' ? '✓' : (cls === 'failed' ? '✕' : (cls === 'skipped' ? '–' : ''));
+    return `<div class="pl-step ${cls}"><div class="pl-dot">${mark}</div><div class="pl-label">${s.label}${sub}</div></div>`;
   }).join('');
+}
+// </timeline-logic>
+
+function renderPipelineVertical(activeIdx, doneAll, outcomes) {
+  document.getElementById('pl-list').innerHTML = pipelineStepsHtml(activeIdx, doneAll, outcomes);
 }
 
 function setUrl(u) {
@@ -618,8 +657,13 @@ async function runScan() {
     if (!res.ok) throw new Error('Request failed with status ' + res.status);
     const data = await res.json();
     clearInterval(stageTimer);
-    renderPipelineVertical(STAGES.length, true);
-    note.textContent = `Pipeline complete — ${Math.round(performance.now() - startedAt)} ms (measured)`;
+    const outcomes = stageOutcomes(data);
+    renderPipelineVertical(STAGES.length, true, outcomes);
+    const allDone = STAGES.every(s => outcomes[s.key].state === 'done');
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    note.textContent = allDone
+      ? `Pipeline complete — ${elapsedMs} ms (measured)`
+      : `Pipeline did not complete — steps marked ✕ or – did not run (${elapsedMs} ms, measured)`;
     render(data);
     setGuardian(
       data.verdict === 'phishing' ? 'done-phish' : (data.verdict === 'benign' ? 'done-benign' : null),
