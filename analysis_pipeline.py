@@ -87,9 +87,21 @@ async def analyze_url(url: str) -> Dict[str, Any]:
         "error_message": fetch_result.get("error_message"),
         "elapsed_ms": fetch_result.get("elapsed_ms"),
     }
+    # The crawler reports status "ok" for any HTTP response and records the code in http_status.
+    # An HTTP error (4xx/5xx) is a server-generated error page, not the requested page, so it
+    # must not be scored: the verdict would describe the error page, not the target.
+    http_status = fetch_result.get("http_status")
+    unavailable_reason = None
     if fetch_result.get("status") != "ok":
+        unavailable_reason = "Crawl did not complete; no page content to analyze."
+    elif isinstance(http_status, int) and http_status >= 400:
+        unavailable_reason = (
+            f"The server returned HTTP {http_status} (an error response), not the requested page, "
+            "so there is no target page content to analyze. The error page was not scored."
+        )
+    if unavailable_reason:
         result["verdict"] = "unavailable"
-        result["verdict_reason"] = "Crawl did not complete; no page content to analyze."
+        result["verdict_reason"] = unavailable_reason
         result["elapsed_ms_total"] = round((time.perf_counter() - started) * 1000, 1)
         return result
 

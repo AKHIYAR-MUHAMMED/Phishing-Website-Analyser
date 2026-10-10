@@ -75,6 +75,11 @@ project review: the page `GET /demo` and the endpoint `POST /api/v2/analyze`
    choosing the "phishing" or "benign" label. Fusion is neither learned nor calibrated, and the
    fused score is not a probability.
 
+If the crawl fails (invalid URL, connection error, timeout, ...) or the server answers with an HTTP
+error status (4xx or 5xx, such as a 404 "File not found" page), the endpoint returns
+`"verdict": "unavailable"` with a `verdict_reason`, no components and no fusion score. An error page
+is not the requested page, so it is never classified as benign or phishing.
+
 What this does and does not show:
 
 - A successful response shows that the pipeline runs end to end on real input. It does **not**
@@ -181,7 +186,7 @@ python run.py
 | :--- | :--- | :--- |
 | `POST` | `/api/v1/scan` (aliases `/api/v1/detect`, `/models/fusion/predict`) | Runs the scan pipeline once. With no `html_content` supplied it **live-crawls** the URL. Returns the crawl result, URL features, DOM statistics and per-component statuses. **Returns no verdict.** |
 | `POST` | `/api/v1/batch-scan` | Same pipeline for up to 10 URLs. No verdicts. |
-| `POST` | `/api/v2/analyze` | **Experimental demo pipeline** (see above): live crawl, URL features, small-sample GNN, rule-based semantic heuristic, unweighted-mean fusion. Returns a "benign" or "phishing" label that is **not** a validated detection result. |
+| `POST` | `/api/v2/analyze` | **Experimental demo pipeline** (see above): live crawl, URL features, small-sample GNN, rule-based semantic heuristic, unweighted-mean fusion. Returns a "benign" or "phishing" label that is **not** a validated detection result; failed crawls and HTTP error responses (4xx/5xx) return `unavailable` with no verdict, components or fusion score. |
 | `GET` | `/demo` | The demo web page; it calls `/api/v2/analyze` only. |
 | `POST` | `/models/gnn/predict` | DOM graph statistics only; the GNN output itself is unavailable. |
 | `GET`/`POST` | `/models/llm/*` | Lists the engines and their real configuration state; POST queries each engine that has a client and an API key and returns that engine's own status/result. No consensus is computed and the output is not part of a scan. |
