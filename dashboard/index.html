@@ -3,12 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PhishGuard AI - Development Dashboard</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <title>PhishGuard AI — Development Dashboard</title>
+    <link rel="icon" type="image/png" href="/static/assets/phishguard-logo.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/styles.css?v=4.0">
+    <link rel="stylesheet" href="/static/styles.css?v=6.0">
 </head>
 
 <body>
@@ -20,7 +18,9 @@
     <div class="app-container">
         <aside class="sidebar">
             <div class="brand">
-                <div class="logo-icon"><i class="fa-solid fa-shield-cat"></i></div>
+                <div class="logo-icon">
+                    <img src="/static/assets/phishguard-logo.png" alt="PhishGuard">
+                </div>
                 <div class="brand-text">
                     <h2>PhishGuard <span>AI</span></h2>
                     <p>Development build</p>
@@ -32,10 +32,7 @@
                     <i class="fa-solid fa-magnifying-glass"></i> Scanner
                 </a>
                 <a href="#" class="nav-item" data-tab="status-tab">
-                    <i class="fa-solid fa-list-check"></i> Component Status
-                </a>
-                <a href="#" class="nav-item" data-tab="evaluation-tab">
-                    <i class="fa-solid fa-chart-column"></i> Evaluation &amp; Data
+                    <i class="fa-solid fa-list-check"></i> Implementation &amp; Roadmap
                 </a>
             </nav>
         </aside>
@@ -44,7 +41,7 @@
             <header class="top-header">
                 <div class="header-title">
                     <h1 id="page-heading">Scanner</h1>
-                    <p>Multimodal phishing website analysis (DOM graph, language model, URL/HTML features). Work in progress.</p>
+                    <p>Real crawler, URL-lexical and DOM-graph analysis run here. GNN, semantic and fusion scoring are demonstrated in <a href="/demo" style="color:var(--brand)">/demo</a> on a small real Phase 3 sample and are not yet wired into this Scanner. Work in progress.</p>
                 </div>
             </header>
 
@@ -119,36 +116,59 @@
                 </div>
             </section>
 
-            <!-- COMPONENT STATUS TAB -->
+            <!-- CURRENT IMPLEMENTATION & ROADMAP TAB -->
             <section id="status-tab" class="tab-page">
+
                 <div class="card-box">
-                    <h2><i class="fa-solid fa-list-check"></i> Component status</h2>
-                    <p class="status-note">Reported by <code>/dashboard/system</code>.</p>
+                    <h2><i class="fa-solid fa-circle-check"></i> Implemented</h2>
+                    <p class="status-note">Real computation on real input — reported by <code>/dashboard/system</code>.</p>
+                    <div id="implemented-grid" class="status-grid-cards"></div>
+                </div>
+
+                <div class="card-box mt-4">
+                    <h2><i class="fa-solid fa-flask"></i> Experimental &amp; Heuristic</h2>
+                    <p class="status-note">Real, but caveated — small real-sample, rule-based, or not yet configured.</p>
+                    <div id="experimental-grid" class="status-grid-cards"></div>
+                </div>
+
+                <div class="card-box mt-4">
+                    <h2><i class="fa-solid fa-database"></i> Data &amp; Evaluation</h2>
+                    <p class="status-note">Reported by <code>/dashboard/datasets</code> and <code>/api/v1/metrics</code>.</p>
+                    <div id="data-eval-grid" class="status-grid-cards"></div>
+                </div>
+
+                <div class="card-box mt-4">
+                    <h2><i class="fa-solid fa-triangle-exclamation"></i> Limitations</h2>
+                    <ul id="limitations-list" class="limitations-list"></ul>
+                </div>
+
+                <details class="card-box mt-4 collapsible-section">
+                    <summary><i class="fa-solid fa-road"></i> Planned Extensions <span id="planned-count" class="count-chip"></span></summary>
+                    <p class="status-note mt-2">Not yet implemented in this repository — explicitly disabled rather than simulated. Hover a chip for the full reason.</p>
+                    <div id="planned-chips" class="planned-chip-grid"></div>
+                </details>
+
+                <details class="card-box mt-4 collapsible-section">
+                    <summary><i class="fa-solid fa-table-list"></i> Full status data (raw)</summary>
+                    <p class="status-note mt-2">Every component and evaluation item, exactly as reported by the API — nothing summarized or omitted.</p>
                     <div class="table-wrapper">
                         <table class="data-table">
                             <thead><tr><th>Component</th><th>Status</th><th>Reason</th></tr></thead>
                             <tbody id="components-tbody"></tbody>
                         </table>
                     </div>
-                </div>
-            </section>
-
-            <!-- EVALUATION TAB -->
-            <section id="evaluation-tab" class="tab-page">
-                <div class="card-box">
-                    <h2><i class="fa-solid fa-chart-column"></i> Evaluation, dataset and scan history</h2>
-                    <p class="status-note">Values appear here only when they come from generated evaluation artifacts or real records.</p>
-                    <div class="table-wrapper">
+                    <div class="table-wrapper mt-2">
                         <table class="data-table">
                             <thead><tr><th>Item</th><th>Status</th><th>Reason</th></tr></thead>
                             <tbody id="evaluation-tbody"></tbody>
                         </table>
                     </div>
-                </div>
+                </details>
+
             </section>
         </main>
     </div>
 
-    <script src="/static/app.js?v=4.0"></script>
+    <script src="/static/app.js?v=5.0"></script>
 </body>
 </html>

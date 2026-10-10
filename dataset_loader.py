@@ -275,8 +275,19 @@ def extract_url_lexical_features(url: str) -> Dict[str, float]:
     url_len_score = 1.0 if url_len > 75 else (0.5 if url_len >= 54 else 0.0)
 
     # 3. Shortening Service
-    shorteners = r"bit\.ly|goo\.gl|tinyurl|tiny\.cc|is\.gd|cli\.gs|yfrog|ow\.ly|t\.co|bit\.do|short\.to|buff\.ly|adf\.ly"
-    shortening_service = 1.0 if re.search(shorteners, url, re.I) else 0.0
+    # Match the URL's host, not the whole URL string. A raw substring search let the shortener
+    # "t.co" match inside "microsoft.com" ("...sof[t.co]m"), a false positive. The host (port and
+    # a leading "www." removed) must equal a listed shortener domain or be a subdomain of one.
+    _SHORTENER_DOMAINS = (
+        "bit.ly", "goo.gl", "tinyurl.com", "tiny.cc", "is.gd", "cli.gs", "yfrog.com",
+        "ow.ly", "t.co", "bit.do", "short.to", "buff.ly", "adf.ly",
+    )
+    _host_only = domain.split(":", 1)[0].lower()
+    if _host_only.startswith("www."):
+        _host_only = _host_only[4:]
+    shortening_service = 1.0 if any(
+        _host_only == d or _host_only.endswith("." + d) for d in _SHORTENER_DOMAINS
+    ) else 0.0
 
     # 4. Having @ Symbol
     having_at = 1.0 if "@" in url else 0.0

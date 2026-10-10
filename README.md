@@ -8,8 +8,12 @@
 > A code audit (see [`CLAUDE.md`](CLAUDE.md)) found that most components described in the original
 > README were simulated: keyword rules, random tensors, hard-coded metrics and fabricated lookups.
 > Those components have been disabled and now report an explicit `unavailable` status (HTTP 501 on
-> their endpoints). **No model is trained or evaluated in this branch, so no accuracy, precision,
-> recall, F1, ROC-AUC or any other performance figure is claimed, and scans return no verdict.**
+> their endpoints). **No model has been evaluated on real held-out data, so no accuracy, precision,
+> recall, F1, ROC-AUC or any other performance figure is claimed, and the baseline scan endpoint
+> (`/api/v1/scan`) returns no verdict.** A separate, experimental demo pipeline (`/demo`,
+> `/api/v2/analyze`) does return a "benign" or "phishing" label; it is built on a 12-sample GNN
+> checkpoint and rule-based heuristics and is **not** a validated detector (see
+> [Experimental demo pipeline](#experimental-demo-pipeline)).
 > Nothing below should be read as a description of working detection capability.
 
 ## Project goal
@@ -31,6 +35,7 @@ integrity rules the project follows, and the phase-by-phase roadmap.
 | JavaScript regex indicators | **Heuristic** | Regex pattern counts over the HTML. Not an AST parser and not a classifier. |
 | Component status registry (`component_status.py`) | **Implemented** | Single source of truth for the honest status of every component, shown by the API and the dashboard. |
 | FastAPI service + dashboard | **Implemented** | Serves the endpoints below and a status/diagnostics dashboard. Shows only values returned by the backend; backend errors are displayed, never replaced by a fabricated result. |
+| Experimental demo pipeline (`analysis_pipeline.py`, `/demo`) | **Experimental** | Small-sample GNN + rule-based semantic heuristic + unweighted-mean fusion. Not a validated detector; see [Experimental demo pipeline](#experimental-demo-pipeline). |
 
 ### Crawler scope — what it does *not* do
 
@@ -53,25 +58,60 @@ within these stated limits:
   deliberately does not validate certificates.
 - It issues GET requests only, and does not render JavaScript or collect screenshots.
 
+## Experimental demo pipeline
+
+Separate from the baseline scan above, the API also serves an **experimental demo** built for
+project review: the page `GET /demo` and the endpoint `POST /api/v2/analyze`
+(`analysis_pipeline.py`). For one URL it chains:
+
+1. the same live, GET-only crawler as the baseline scan;
+2. the URL lexical features (`dataset_loader.py`);
+3. the DOM graph (first 200 elements) and a forward pass through a small 2-layer graph attention
+   network loaded from `gnn_model_demo.pt`, a checkpoint produced by `train_gnn_demo.py` from **12**
+   real pilot webpages (8 phishing, 4 benign);
+4. a rule-based keyword heuristic over the page title and visible text (`semantic_heuristic.py`).
+   This is **not a language model**; no LLM API key is used or required;
+5. fusion by an **unweighted mean** of the three scores, with a fixed 0.5 threshold on that mean
+   choosing the "phishing" or "benign" label. Fusion is neither learned nor calibrated, and the
+   fused score is not a probability.
+
+What this does and does not show:
+
+- A successful response shows that the pipeline runs end to end on real input. It does **not**
+  establish detection accuracy or generalisation.
+- The 12-sample checkpoint is unreliable. In a local smoke test (2026-10-09) a harmless static page
+  containing a form and a password field received a GNN signal of about 0.99; the fused score
+  (about 0.35) still produced "benign".
+- `gnn_model_demo_metrics.json` holds **HISTORICAL** training observations from that single run
+  (train n=12, val n=14, test n=1). They are kept unchanged for transparency, are not an independent
+  evaluation, and must not be cited as performance or combined with any future evaluation.
+- The checkpoint was not trained on the Phase 3 dataset mentioned below, and no model has been
+  retrained or evaluated on that dataset.
+- Components outside this pipeline (visual, BERT, classical ML, anomaly detection, WHOIS/DNS,
+  SSL/TLS, threat intelligence, explanation) remain `unavailable`, as listed next.
+
 ## What is NOT implemented (reported as `unavailable` / HTTP 501)
 
-- **GNN inference.** `gnn_model.pt` was trained on a fixed synthetic template graph, not on real
-  webpage DOMs, so its output is not a valid phishing probability and is not used. Retraining on
-  real data is future work.
-- **LLM / language-model semantic analysis in the scan pipeline.** No language model takes part in
-  a scan. `llm_ensemble.py` lists 10 engines, but only 5 (OpenAI, Anthropic, Google, DeepSeek,
+- **GNN inference in the baseline scan.** `gnn_model.pt` was trained on a fixed synthetic template
+  graph, not on real webpage DOMs, so its output is not a valid phishing probability and is not
+  used by `/api/v1/scan`. (The experimental demo above uses a separate small-sample checkpoint.)
+  Retraining on real data at scale is future work.
+- **LLM / language-model semantic analysis.** No language model takes part in a scan or in the
+  demo pipeline. `llm_ensemble.py` lists 10 engines, but only 5 (OpenAI, Anthropic, Google, DeepSeek,
   Mistral) have any client code, and that code needs the matching API key, is untested in this
   repository, and uses unverified model IDs. The other 5 (Llama, Qwen, Cohere Command A, Falcon,
   Phi-4) have no implementation. The `/models/llm/*` endpoints query each engine individually and
   report that engine's own result or an explicit `unavailable` / not-implemented status. **No
   consensus is computed** (the aggregate is reported as `unavailable`), and the previous "10-LLM
   Bayesian consensus" — a shared keyword heuristic with a plain weighted mean — has been removed.
-- **Multimodal fusion.** No fusion model exists, so no verdict or probability is produced.
+- **Learned multimodal fusion.** No trained or calibrated fusion model exists, so the baseline scan
+  produces no verdict or probability; the demo uses only the unweighted mean described above.
 - **Visual analysis** (screenshots, ViT, Phishpedia, VisualPhishNet, pHash/FAISS, OCR), **BERT**,
   **classical ML baselines**, **anomaly detection**, **WHOIS/DNS**, **SSL/TLS inspection** and
   **threat-intelligence** lookups: the old implementations were simulated and are disabled.
 - **Explainability, scan history, authentication** and **dataset export/benchmark** endpoints.
-- **Evaluation.** No model has been evaluated on real held-out data.
+- **Evaluation.** No model has been evaluated on real held-out data. The demo checkpoint's recorded
+  metrics are HISTORICAL training observations, not an evaluation.
 - **Dataset.** The committed CSV files under `data/` contain label-conditional random features and
   **must not be used for training or evaluation** (`CLAUDE.md` section 6). The Phase 3 collection
   pipeline exists in `dataset/` (code only; design in `PHASE3_DATASET_PLAN.md`), but **no collected
@@ -91,19 +131,27 @@ URL -> crawler -> HTML + visible text
         '-> page text -> language model /
 ```
 
-Only the crawler and the feature/graph-construction steps exist today. The GNN, language-model,
-fusion and explanation stages are future work.
+In the baseline scan only the crawler and the feature/graph-construction steps exist. The
+experimental demo adds a small-sample GNN and a rule-based semantic heuristic combined by an
+unweighted mean; a GNN trained at scale, a language model, learned fusion and explanations are
+future work.
 
 ## Repository structure
 
 ```
-api.py                  FastAPI gateway (real scan route; disabled components return HTTP 501)
+api.py                  FastAPI gateway (real scan route, experimental demo routes; disabled
+                        components return HTTP 501)
+analysis_pipeline.py    Experimental demo pipeline behind POST /api/v2/analyze
+semantic_heuristic.py   Rule-based keyword heuristic used by the demo (not an LLM)
+train_gnn_demo.py       Script behind the demo's small-sample (N=12) checkpoint
+gnn_model_demo.pt       Demo GNN checkpoint (small-sample; results are HISTORICAL)
+gnn_model_demo_metrics.json  HISTORICAL training observations for that checkpoint
 run.py                  Launcher: prints the real component status, then starts the API
 component_status.py     Honest status registry for every component
 config.py               Environment-driven configuration (crawler limits, paths)
 crawler/                Real GET-only HTTP crawler
 services/               Thin service wrappers around the modules above
-dashboard/              Status / diagnostics web interface
+dashboard/              Status / diagnostics web interface and the /demo page (demo.html)
 tests/                  Behaviour tests incl. no-fabrication and crawler tests (local test server)
 data/                   Legacy SYNTHETIC CSV/JSON files — do not use for training or evaluation
 CLAUDE.md               Audit findings, integrity rules, roadmap
@@ -125,6 +173,7 @@ python run.py
 
 - Dashboard: `http://127.0.0.1:8000`
 - API docs (Swagger): `http://127.0.0.1:8000/docs`
+- Experimental demo: `http://127.0.0.1:8000/demo`
 
 ## API overview
 
@@ -132,6 +181,8 @@ python run.py
 | :--- | :--- | :--- |
 | `POST` | `/api/v1/scan` (aliases `/api/v1/detect`, `/models/fusion/predict`) | Runs the scan pipeline once. With no `html_content` supplied it **live-crawls** the URL. Returns the crawl result, URL features, DOM statistics and per-component statuses. **Returns no verdict.** |
 | `POST` | `/api/v1/batch-scan` | Same pipeline for up to 10 URLs. No verdicts. |
+| `POST` | `/api/v2/analyze` | **Experimental demo pipeline** (see above): live crawl, URL features, small-sample GNN, rule-based semantic heuristic, unweighted-mean fusion. Returns a "benign" or "phishing" label that is **not** a validated detection result. |
+| `GET` | `/demo` | The demo web page; it calls `/api/v2/analyze` only. |
 | `POST` | `/models/gnn/predict` | DOM graph statistics only; the GNN output itself is unavailable. |
 | `GET`/`POST` | `/models/llm/*` | Lists the engines and their real configuration state; POST queries each engine that has a client and an API key and returns that engine's own status/result. No consensus is computed and the output is not part of a scan. |
 | `GET` | `/api/v1/dashboard`, `/api/v1/model_info`, ... | Component status registry. |

@@ -1,0 +1,53 @@
+{
+  "STATUS": "HISTORICAL. Recorded results of a single small-sample training run (checkpoint gnn_model_demo.pt, N=12 training samples). All values in this file are preserved unchanged. They are training/validation/test observations of that one run, not an independent evaluation and not evidence of generalization, and they must be kept separate from, and never aggregated with, any future evaluation on a later dataset version.",
+  "HONESTY_NOTE": "Trained on N=12 real webpage DOM graphs from the Phase 3 pilot collection (8 phishing, 4 benign) using train_gnn_demo.py, not the synthetic 15-node template train_gnn.py used. This dataset is far too small to support a generalization claim. Metrics below are reported exactly as computed, for demo transparency only, and must never be cited as validated model performance.",
+  "seed": 42,
+  "epochs": 30,
+  "train_loss_curve": [
+    0.7047366301218668,
+    0.6849586566289266,
+    0.6815839856863022,
+    0.6650120963652929,
+    0.6252026582757632,
+    0.5617678066094717,
+    0.495757923151056,
+    0.42475674611826736,
+    0.3973122102518876,
+    0.3474065028131008,
+    0.3862922568805516,
+    0.35601523821242154,
+    0.2738809647950499,
+    0.23856764965845892,
+    0.1855832747872531,
+    0.2061886129716489,
+    0.20318967412943797,
+    0.17375261159516717,
+    0.20374914681936693,
+    0.15187999735462654,
+    0.10495412721562995,
+    0.08082329629021008,
+    0.062133615733785064,
+    0.04523427457628978,
+    0.04098433563011857,
+    0.021531943782765545,
+    0.013745422118346173,
+    0.023972312349063715,
+    0.011216895340102992,
+    0.010102795470188905
+  ],
+  "train_metrics": {
+    "n": 12,
+    "accuracy": 1.0,
+    "mean_bce_loss": 0.008697025386092133
+  },
+  "val_metrics": {
+    "n": 14,
+    "accuracy": 1.0,
+    "mean_bce_loss": 0.003594426650985432
+  },
+  "test_metrics": {
+    "n": 1,
+    "accuracy": 0.0,
+    "mean_bce_loss": 15.942384719848633
+  }
+}
