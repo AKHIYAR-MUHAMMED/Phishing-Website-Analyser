@@ -15,9 +15,10 @@ component is unavailable, its section says so explicitly and it is excluded from
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import torch
+from bs4 import BeautifulSoup
 
 from crawler.fetcher import fetch_url
 from dataset_loader import extract_url_lexical_features
@@ -72,6 +73,36 @@ def _lexical_risk_signal(lexical: Dict[str, float]) -> Dict[str, Any]:
     }
 
 
+# Elements that only scaffold a document and carry no page content of their own.
+_SCAFFOLD_TAGS = {"html", "head", "body"}
+
+
+def _no_analysable_html_reason(fetch_result: Dict[str, Any]) -> Optional[str]:
+    """Returns why a successfully fetched response has no HTML page to analyse, or None when it does.
+
+    The GNN, the DOM graph and the semantic heuristic only mean something for a real HTML page.
+    Without one (empty body, a non-HTML content type, or markup with no elements) the stages would
+    run on nothing, or on parse_dom_to_graph()'s synthetic fallback graph, and the result would be
+    scored as if it described a page. The crawler leaves `html` empty for non-textual content types
+    and also for a body that has no Content-Type header, so those are reported here as well."""
+    html = fetch_result.get("html", "") or ""
+    body_bytes = fetch_result.get("html_length_bytes")
+    # Only the media type is echoed back: the header is server-controlled and shown in the UI.
+    media_type = (fetch_result.get("content_type") or "").split(";", 1)[0].strip().lower()[:100]
+
+    if body_bytes == 0:
+        return "The server returned an empty response, so there is no page content to analyze."
+    if "html" not in media_type:
+        shown = f"content type: {media_type}" if media_type else "no content type was provided"
+        return (f"The response was not identified as an HTML page ({shown}), so there is no page "
+                "content to analyze.")
+    if not html.strip():
+        return "The response contained only whitespace, so there is no page content to analyze."
+    if not any(tag.name.lower() not in _SCAFFOLD_TAGS for tag in BeautifulSoup(html, "html.parser").find_all(True)):
+        return "The response contained no HTML page content (no elements), so there is nothing to analyze."
+    return None
+
+
 async def analyze_url(url: str) -> Dict[str, Any]:
     started = time.perf_counter()
     result: Dict[str, Any] = {"url": url, "components": {}}
@@ -99,6 +130,8 @@ async def analyze_url(url: str) -> Dict[str, Any]:
             f"The server returned HTTP {http_status} (an error response), not the requested page, "
             "so there is no target page content to analyze. The error page was not scored."
         )
+    else:
+        unavailable_reason = _no_analysable_html_reason(fetch_result)
     if unavailable_reason:
         result["verdict"] = "unavailable"
         result["verdict_reason"] = unavailable_reason
@@ -110,7 +143,7 @@ async def analyze_url(url: str) -> Dict[str, Any]:
     title = fetch_result.get("title", "")
     visible_text = fetch_result.get("visible_text", "")
 
-    # 3. Real URL lexical features
+    # 3. Real URL lexical features (only reached when the response has an analysable HTML page)
     lexical = extract_url_lexical_features(url)
     result["components"]["url_lexical"] = {
         "status": "ok",
